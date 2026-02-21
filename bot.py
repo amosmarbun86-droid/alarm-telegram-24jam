@@ -1,56 +1,82 @@
-import pandas as pd
+import csv
 import time
 import requests
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
-TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
+# =============================
+# KONFIGURASI
+# =============================
+BOT_TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
 CHAT_ID = "8559067633"
 CSV_FILE = "jadwal.csv"
 
-def kirim(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": msg}
+sent_today = set()
+
+# =============================
+# KIRIM TELEGRAM
+# =============================
+def kirim(pesan):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": pesan}
     requests.post(url, data=data)
 
-print("BOT AKTIF 24 JAM")
+# =============================
+# BACA CSV
+# =============================
+def baca_jadwal():
+    jadwal = []
+    with open(CSV_FILE, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            route = r.get("Route", "Tanpa Nama").strip()
+            start = r.get("Start Loading", "").strip()
+            selesai = r.get("Selesai Loading", "").strip()
+
+            if start:
+                jadwal.append(("START", route, start))
+
+            if selesai:
+                jadwal.append(("SELESAI", route, selesai))
+
+    return jadwal
+
+# =============================
+# LOOP UTAMA
+# =============================
+print("🚀 BOT ALARM AKTIF (WIB)")
 
 while True:
+    now_dt = datetime.now(ZoneInfo("Asia/Jakarta"))
+    now = now_dt.strftime("%H:%M")
+
     try:
-        df = pd.read_csv(CSV_FILE)
-        df.columns = df.columns.str.strip().str.lower()
+        data = baca_jadwal()
 
-        now = datetime.now()
+        for jenis, route, waktu in data:
 
-        for _, row in df.iterrows():
+            key = (jenis, route, waktu, now_dt.date())
 
-            route = str(row.get("route", ""))
-            start_loading = str(row.get("start loading", ""))
-            selesai_loading = str(row.get("selesai loading", ""))
+            # 🔔 ALARM TEPAT WAKTU
+            if now == waktu and key not in sent_today:
+                kirim(f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB")
+                sent_today.add(key)
 
-            if start_loading and start_loading != "nan":
-                t = datetime.strptime(start_loading, "%H:%M")
-                t = now.replace(hour=t.hour, minute=t.minute)
+            # ⏳ REMINDER H-10 MENIT
+            t_jadwal = datetime.strptime(waktu, "%H:%M").replace(
+                year=now_dt.year,
+                month=now_dt.month,
+                day=now_dt.day,
+                tzinfo=ZoneInfo("Asia/Jakarta"),
+            )
 
-                if abs((now - t).total_seconds()) < 30:
-                    kirim(f"START LOADING {route} {start_loading}")
-
-                reminder = t - timedelta(minutes=10)
-                if abs((now - reminder).total_seconds()) < 30:
-                    kirim(f"H-10 START LOADING {route} {start_loading}")
-
-            if selesai_loading and selesai_loading != "nan":
-                t = datetime.strptime(selesai_loading, "%H:%M")
-                t = now.replace(hour=t.hour, minute=t.minute)
-
-                if abs((now - t).total_seconds()) < 30:
-                    kirim(f"SELESAI LOADING {route} {selesai_loading}")
-
-                reminder = t - timedelta(minutes=10)
-                if abs((now - reminder).total_seconds()) < 30:
-                    kirim(f"H-10 SELESAI {route} {selesai_loading}")
-
-        time.sleep(30)
+            if t_jadwal - timedelta(minutes=10) <= now_dt < t_jadwal:
+                key_reminder = ("REMINDER", jenis, route, waktu, now_dt.date())
+                if key_reminder not in sent_today:
+                    kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}\n⏰ {waktu} WIB")
+                    sent_today.add(key_reminder)
 
     except Exception as e:
         print("ERROR:", e)
-        time.sleep(10)
+
+    time.sleep(30)
