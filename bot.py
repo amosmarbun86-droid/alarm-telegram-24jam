@@ -21,13 +21,26 @@ def kirim(pesan):
 # =============================
 def ambil_route(row):
     for k in row.keys():
-        key = k.lower().strip()
-
-        if key in ["route", "rute", "tujuan", "jalur"]:
+        if k.lower().strip() in ["route", "rute", "tujuan", "jalur"]:
             return row[k].strip()
 
-    # fallback ambil kolom pertama
     return list(row.values())[0].strip()
+
+
+# =============================
+# AMBIL WAKTU DENGAN NAMA FLEKSIBEL
+# =============================
+def ambil_waktu(row, tipe):
+    for k in row.keys():
+        key = k.lower().strip()
+
+        if tipe == "start" and "start" in key:
+            return row[k].strip()
+
+        if tipe == "selesai" and "selesai" in key:
+            return row[k].strip()
+
+    return ""
 
 
 # =============================
@@ -42,8 +55,8 @@ def baca_jadwal():
         for r in reader:
             route = ambil_route(r)
 
-            start = r.get("Start Loading", "").strip()
-            selesai = r.get("Selesai Loading", "").strip()
+            start = ambil_waktu(r, "start")
+            selesai = ambil_waktu(r, "selesai")
 
             if start:
                 jadwal.append(("START", route, start))
@@ -55,9 +68,9 @@ def baca_jadwal():
 
 
 # =============================
-# LOOP
+# LOOP UTAMA
 # =============================
-print("🚀 BOT ALARM AKTIF (WIB)")
+print("🚀 BOT ALARM AKTIF 24 JAM (WIB)")
 
 while True:
     now_dt = datetime.now(ZoneInfo("Asia/Jakarta"))
