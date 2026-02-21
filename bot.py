@@ -1,14 +1,12 @@
-import pandas as pd
 import requests
+import csv
 import time
 from datetime import datetime, timedelta
 
 TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
 CHAT_ID = "8559067633"
 
-df = pd.read_csv("Jadwal_Route_Siborong_Borong.csv")
-
-sudah_kirim = set()
+CSV_FILE = "Jadwal_Route_Siborong_Borong.csv"
 
 def kirim(pesan):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
@@ -16,43 +14,47 @@ def kirim(pesan):
 
 print("🔔 BOT LOGISTIK AKTIF 24 JAM")
 
+sudah_kirim = set()
+
 while True:
-    now = datetime.now()
+    sekarang = datetime.now().strftime("%H:%M")
 
-    for i, row in df.iterrows():
-        waktu_str = str(row["Start Loading"])[:5]
-        jam, menit = map(int, waktu_str.split(":"))
+    with open(CSV_FILE, newline='', encoding='utf-8') as f:
+        data = csv.DictReader(f)
 
-        jadwal = now.replace(hour=jam, minute=menit, second=0, microsecond=0)
-        reminder = jadwal - timedelta(minutes=10)
+        for row in data:
 
-        key_alarm = f"{i}_alarm_{jadwal.date()}"
-        key_reminder = f"{i}_reminder_{jadwal.date()}"
+            route = row["Route"]
 
-        # ⏰ REMINDER H-10 MENIT
-        if reminder <= now < jadwal and key_reminder not in sudah_kirim:
-            pesan = f"""
-⏰ REMINDER 10 MENIT LAGI
+            start = row["Start Loading"]
+            selesai = row["Selesai Loading"]
 
-Route : {row['Route']}
-Slot  : {row['Slot']}
+            # 🔥 Reminder H-10 menit START
+            waktu_start_minus = (
+                datetime.strptime(start, "%H:%M") - timedelta(minutes=10)
+            ).strftime("%H:%M")
 
-Start Loading : {waktu_str}
-"""
-            kirim(pesan)
-            sudah_kirim.add(key_reminder)
+            if sekarang == waktu_start_minus and ("rem_start", route) not in sudah_kirim:
+                kirim(f"⏰ H-10 START LOADING\n{route}\nJam {start}")
+                sudah_kirim.add(("rem_start", route))
 
-        # 🚛 ALARM UTAMA
-        if jadwal <= now < jadwal + timedelta(minutes=1) and key_alarm not in sudah_kirim:
-            pesan = f"""
-🚛 WAKTUNYA BERANGKAT
+            # 🔥 Alarm START
+            if sekarang == start and ("start", route) not in sudah_kirim:
+                kirim(f"🔔 START LOADING\n{route}\nJam {start}")
+                sudah_kirim.add(("start", route))
 
-Route : {row['Route']}
-Slot  : {row['Slot']}
+            # 🔥 Reminder H-10 SELESAI
+            waktu_selesai_minus = (
+                datetime.strptime(selesai, "%H:%M") - timedelta(minutes=10)
+            ).strftime("%H:%M")
 
-⏰ Start Loading : {waktu_str}
-"""
-            kirim(pesan)
-            sudah_kirim.add(key_alarm)
+            if sekarang == waktu_selesai_minus and ("rem_end", route) not in sudah_kirim:
+                kirim(f"⏰ H-10 SELESAI LOADING\n{route}\nJam {selesai}")
+                sudah_kirim.add(("rem_end", route))
 
-    time.sleep(20)
+            # 🔥 Alarm SELESAI
+            if sekarang == selesai and ("end", route) not in sudah_kirim:
+                kirim(f"✅ SELESAI LOADING\n{route}\nJam {selesai}")
+                sudah_kirim.add(("end", route))
+
+    time.sleep(30)
