@@ -16,12 +16,17 @@ sent_today = set()
 
 
 def kirim_suara(file_audio, caption):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVoice"
+
     with open(file_audio, "rb") as f:
         requests.post(
             url,
-            data={"chat_id": CHAT_ID, "caption": caption},
-            files={"audio": f},
+            data={
+                "chat_id": CHAT_ID,
+                "caption": caption,
+                "disable_notification": True
+            },
+            files={"voice": f},
         )
 
 
