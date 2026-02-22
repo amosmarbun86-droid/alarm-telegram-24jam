@@ -1,178 +1,111 @@
-# BOT ALARM LOADING — FINAL (RAPI & SIAP PASTE)
-# ==================================================
-# ✅ Tanpa suara
-# ✅ Tanda warna (emoji) berbeda
-# ✅ Ambil Slot dari CSV
-# ✅ H‑10 Start & Finish
-# ✅ Shift malam otomatis (lewat tengah malam aman)
-# ✅ Anti dobel kirim (presisi detik)
-# ✅ Reset otomatis tiap hari
-# ✅ Timezone WIB (Asia/Jakarta / UTC+7)
-# ✅ Siap deploy 24 jam (Railway / VPS)
-# ==================================================
-
 import csv
 import time
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
-# ================== KONFIGURASI ==================
-TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"     # ← GANTI
-CHAT_ID = "8559067633"     # ← GANTI
-CSV_FILE = "jadwal.csv"     # Nama file CSV
+BOT_TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
+CHAT_ID = "8559067633"
+CSV_FILE = "jadwal.csv"
 
-# Timezone WIB (UTC+7)
-WIB = timezone(timedelta(hours=7))
-
-
-# ================== FUNGSI KIRIM ==================
-
-def kirim(teks: str):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    data = {
-        "chat_id": CHAT_ID,
-        "text": teks
-    }
-    requests.post(url, data=data, timeout=20)
+sent_today = set()
 
 
-# ================== UTIL WAKTU ==================
-
-def now_wib() -> datetime:
-    """Waktu sekarang dalam WIB (tanpa microsecond)"""
-    return datetime.now(WIB).replace(microsecond=0)
+def kirim(pesan):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": pesan})
 
 
-def parse_hhmm_today_wib(hhmm: str, base: datetime) -> datetime:
-    """Ubah 'HH:MM' menjadi datetime hari ini (WIB)"""
-    h, m = hhmm.strip().split(":")
-    return base.replace(hour=int(h), minute=int(m), second=0)
+# =============================
+# AMBIL NAMA ROUTE OTOMATIS
+# =============================
+def ambil_route(row):
+    for k in row.keys():
+        if k.lower().strip() in ["route", "rute", "tujuan", "jalur"]:
+            return row[k].strip()
+
+    return list(row.values())[0].strip()
 
 
-def normalize_shift(t: datetime, base: datetime) -> datetime:
-    """
-    SHIFT MALAM OTOMATIS
-    Jika selisih > 12 jam → geser ke hari terdekat
-    """
-    diff = (t - base).total_seconds()
+# =============================
+# AMBIL WAKTU DENGAN NAMA FLEKSIBEL
+# =============================
+def ambil_waktu(row, tipe):
+    for k in row.keys():
+        key = k.lower().strip()
 
-    if diff <= -12 * 3600:
-        return t + timedelta(days=1)
+        if tipe == "start" and "start" in key:
+            return row[k].strip()
 
-    if diff >= 12 * 3600:
-        return t - timedelta(days=1)
+        if tipe == "selesai" and "selesai" in key:
+            return row[k].strip()
 
-    return t
-
-
-def due(now: datetime, target: datetime, tol_sec: int = 1) -> bool:
-    """
-    True jika sekarang tepat di waktu target
-    Toleransi ±1 detik (sangat presisi)
-    """
-    return abs((now - target).total_seconds()) <= tol_sec
+    return ""
 
 
-# ================== STATE ==================
-last_sent = set()           # Simpan event yang sudah dikirim hari ini
-current_day = now_wib().date()
-
-print("🚀 BOT ALARM LOADING FINAL AKTIF (WIB • SHIFT MALAM OTOMATIS)")
-
-
-# ================== LOOP UTAMA ==================
-while True:
-    now = now_wib()
-
-    # Reset otomatis tiap hari
-    if now.date() != current_day:
-        last_sent.clear()
-        current_day = now.date()
+# =============================
+# BACA CSV
+# =============================
+def baca_jadwal():
+    jadwal = []
 
     with open(CSV_FILE, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
 
-        for row in reader:
-            route = (row.get("Route") or "-").strip()
-            slot = (row.get("Slot") or "-").strip()
-            start_s = (row.get("Start Loading") or "").strip()
-            finish_s = (row.get("Selesai Loading") or "").strip()
+        for r in reader:
+            route = ambil_route(r)
 
-            if not start_s or not finish_s:
-                continue
+            start = ambil_waktu(r, "start")
+            selesai = ambil_waktu(r, "selesai")
 
-            try:
-                t_start = normalize_shift(
-                    parse_hhmm_today_wib(start_s, now), now
-                )
-                t_finish = normalize_shift(
-                    parse_hhmm_today_wib(finish_s, now), now
-                )
-            except Exception:
-                continue
+            if start:
+                jadwal.append(("START", route, start))
 
-            h10_start = t_start - timedelta(minutes=10)
-            h10_finish = t_finish - timedelta(minutes=10)
+            if selesai:
+                jadwal.append(("SELESAI", route, selesai))
 
-            # ==================================================
-            # H‑10 START
-            # ==================================================
-            key = f"H10S|{route}|{slot}|{start_s}|{current_day}"
-            if due(now, h10_start) and key not in last_sent:
-                kirim(
-                    "🟠 ⏳ H-10 MENIT LOADING\n"
-                    "━━━━━━━━━━━━━━━━\n"
-                    f"📦 Route : {route}\n"
-                    f"🅿️ Slot  : {slot}\n"
-                    f"⏰ Jam   : {start_s} WIB\n"
-                    "━━━━━━━━━━━━━━━━"
-                )
-                last_sent.add(key)
+    return jadwal
 
-            # ==================================================
-            # START LOADING
-            # ==================================================
-            key = f"START|{route}|{slot}|{start_s}|{current_day}"
-            if due(now, t_start) and key not in last_sent:
-                kirim(
-                    "🟡 🚨 MULAI LOADING\n"
-                    "━━━━━━━━━━━━━━━━\n"
-                    f"📦 Route : {route}\n"
-                    f"🅿️ Slot  : {slot}\n"
-                    f"⏰ Jam   : {start_s} WIB\n"
-                    "━━━━━━━━━━━━━━━━"
-                )
-                last_sent.add(key)
 
-            # ==================================================
-            # H‑10 FINISH
-            # ==================================================
-            key = f"H10F|{route}|{slot}|{finish_s}|{current_day}"
-            if due(now, h10_finish) and key not in last_sent:
-                kirim(
-                    "🟠 ⏳ H-10 MENIT SELESAI LOADING\n"
-                    "━━━━━━━━━━━━━━━━\n"
-                    f"📦 Route : {route}\n"
-                    f"🅿️ Slot  : {slot}\n"
-                    f"⏰ Jam   : {finish_s} WIB\n"
-                    "━━━━━━━━━━━━━━━━"
-                )
-                last_sent.add(key)
+# =============================
+# LOOP UTAMA
+# =============================
+print("🚀 BOT ALARM AKTIF 24 JAM (WIB)")
 
-            # ==================================================
-            # SELESAI LOADING
-            # ==================================================
-            key = f"FINISH|{route}|{slot}|{finish_s}|{current_day}"
-            if due(now, t_finish) and key not in last_sent:
-                kirim(
-                    "🟢 ✔ SELESAI LOADING\n"
-                    "━━━━━━━━━━━━━━━━\n"
-                    f"📦 Route : {route}\n"
-                    f"🅿️ Slot  : {slot}\n"
-                    f"⏰ Jam   : {finish_s} WIB\n"
-                    "━━━━━━━━━━━━━━━━"
-                )
-                last_sent.add(key)
+while True:
+    now_dt = datetime.now(ZoneInfo("Asia/Jakarta"))
+    now = now_dt.strftime("%H:%M")
 
-    # Cek setiap 1 detik (akurasi tinggi)
-    time.sleep(1)
+    try:
+        data = baca_jadwal()
+
+        for jenis, route, waktu in data:
+
+            key = (jenis, route, waktu, now_dt.date())
+
+            # 🔔 TEPAT WAKTU
+            if now == waktu and key not in sent_today:
+                kirim(f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB")
+                sent_today.add(key)
+
+            # ⏳ H-10 MENIT
+            t_jadwal = datetime.strptime(waktu, "%H:%M").replace(
+                year=now_dt.year,
+                month=now_dt.month,
+                day=now_dt.day,
+                tzinfo=ZoneInfo("Asia/Jakarta"),
+            )
+
+            if t_jadwal - timedelta(minutes=10) <= now_dt < t_jadwal:
+                key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
+
+                if key_r not in sent_today:
+                    kirim(
+                        f"⏳ H-10 MENIT {jenis}\n📍 {route}\n⏰ {waktu} WIB"
+                    )
+                    sent_today.add(key_r)
+
+    except Exception as e:
+        print("ERROR:", e)
+
+    time.sleep(30)
