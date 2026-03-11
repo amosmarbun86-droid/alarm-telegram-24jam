@@ -57,9 +57,9 @@ def baca_csv():
 
         for row in reader:
 
-            route = row["Route"]
-            start = row["Start Loading"]
-            selesai = row["Selesai loading"]
+routeroute = row.get("Route") or row.get("route") or ""
+start = row.get("Start Loading") or row.get("start") or ""
+selesai = row.get("Selesai loading") or row.get("selesai") or ""
 
             data.append((route, start, selesai))
 
