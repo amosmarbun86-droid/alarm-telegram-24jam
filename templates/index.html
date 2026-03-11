@@ -1,0 +1,31 @@
+<html>
+<head>
+<title>Dashboard Route Alarm</title>
+</head>
+
+<body>
+
+<h2>Dashboard Jadwal</h2>
+
+<table border="1">
+
+<tr>
+<th>Route</th>
+<th>Start</th>
+<th>Selesai</th>
+</tr>
+
+{% for r in data %}
+
+<tr>
+<td>{{r["Route"]}}</td>
+<td>{{r["Start Loading"]}}</td>
+<td>{{r["Selesai loading"]}}</td>
+</tr>
+
+{% endfor %}
+
+</table>
+
+</body>
+</html>
