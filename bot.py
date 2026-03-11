@@ -96,6 +96,7 @@ def baca_csv():
 # ========================
 # COMMAND TELEGRAM
 # ========================
+
 def cek_command():
 
     global last_update
@@ -111,7 +112,12 @@ def cek_command():
 
         r = requests.get(url, params=params).json()
 
-        for u in r["result"]:
+        # cek error telegram API
+        if not r.get("ok"):
+            print("Telegram API ERROR:", r)
+            return
+
+        for u in r.get("result", []):
 
             last_update = u["update_id"]
 
@@ -127,6 +133,9 @@ def cek_command():
 
             text = msg.get("text", "")
 
+            # =================
+            # COMMAND STATUS
+            # =================
             if text == "/status":
 
                 kirim(
@@ -134,6 +143,9 @@ def cek_command():
                     + datetime.now().strftime("%H:%M:%S")
                 )
 
+            # =================
+            # COMMAND TEST ALARM
+            # =================
             elif text == "/testalarm":
 
                 kirim(
@@ -142,27 +154,34 @@ def cek_command():
                     "⏰ " + datetime.now().strftime("%H:%M")
                 )
 
+            # =================
+            # COMMAND JADWAL
+            # =================
             elif text == "/jadwal":
 
                 data = baca_csv()
 
                 if not data:
                     kirim("Jadwal kosong")
-                    return
+                    continue
 
                 msg_text = "📋 JADWAL ROUTE\n\n"
 
                 for jenis, route, waktu in data:
-
                     msg_text += f"{jenis} | {route} | {waktu}\n"
 
                 kirim(msg_text)
 
+            # =================
+            # COMMAND RELOAD
+            # =================
             elif text == "/reload":
 
                 kirim("♻️ CSV berhasil di reload")
 
-            # upload CSV
+            # =================
+            # UPLOAD CSV
+            # =================
             if "document" in msg:
 
                 doc = msg["document"]
@@ -189,7 +208,6 @@ def cek_command():
     except Exception as e:
 
         print("COMMAND ERROR:", e)
-
 
 # ========================
 # ALARM CHECK
