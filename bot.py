@@ -5,9 +5,9 @@ import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-BOT_TOKEN = "ISI_BOT_TOKEN"
+BOT_TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
 CHAT_ID = "ISI_CHAT_ID"
-CSV_FILE = "jadwal.csv"
+CSV_FILE = "8559067633"
 
 sent_today = set()
 today_date = None
