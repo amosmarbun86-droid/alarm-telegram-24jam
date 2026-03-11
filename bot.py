@@ -1,86 +1,38 @@
 import csv
 import time
 import requests
+import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import os
 
-BOT_TOKEN ="8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
-CHAT_ID ="8559067633"
+BOT_TOKEN = "ISI_BOT_TOKEN"
+CHAT_ID = "ISI_CHAT_ID"
 CSV_FILE = "jadwal.csv"
 
 sent_today = set()
 today_date = None
-last_update_id = None
-mode_tambah = False
+last_update = None
 
-# ==========================
-# TELEGRAM API
-# ==========================
+
+# ========================
+# TELEGRAM SEND
+# ========================
 def kirim(text):
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
-    requests.post(url, data={
-        "chat_id": CHAT_ID,
-        "text": text
-    })
+    try:
+        requests.post(url, data={
+            "chat_id": CHAT_ID,
+            "text": text
+        })
+    except Exception as e:
+        print("SEND ERROR:", e)
 
 
-def get_updates():
-    global last_update_id
-
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-
-    params = {"timeout": 1}
-
-    if last_update_id:
-        params["offset"] = last_update_id + 1
-
-    r = requests.get(url, params=params).json()
-
-    return r["result"]
-
-
-# ==========================
-# CSV FUNCTIONS
-# ==========================
-def baca_csv():
-
-    data = []
-
-    if not os.path.exists(CSV_FILE):
-        return data
-
-    with open(CSV_FILE, newline="", encoding="utf-8") as f:
-
-        reader = csv.DictReader(f)
-
-        for row in reader:
-
-routeroute = row.get("Route") or row.get("route") or ""
-start = row.get("Start Loading") or row.get("start") or ""
-selesai = row.get("Selesai loading") or row.get("selesai") or ""
-
-            data.append((route, start, selesai))
-
-    return data
-
-
-def simpan_csv(data):
-
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
-
-        writer = csv.writer(f)
-
-        writer.writerow(["Route", "Start Loading", "Selesai loading"])
-
-        for r in data:
-            writer.writerow(r)
-
-
-# ==========================
-# FORMAT WAKTU
-# ==========================
+# ========================
+# FORMAT TIME
+# ========================
 def format_waktu(w):
 
     try:
@@ -90,168 +42,158 @@ def format_waktu(w):
         return ""
 
 
-# ==========================
-# TAMPILKAN JADWAL
-# ==========================
-def kirim_jadwal():
+# ========================
+# READ CSV
+# ========================
+def baca_csv():
 
-    data = baca_csv()
+    data = []
 
-    if not data:
-        kirim("Jadwal kosong")
-        return
-
-    text = "📋 DAFTAR JADWAL\n\n"
-
-    for i, d in enumerate(data, 1):
-
-        text += (
-            f"{i}. {d[0]}\n"
-            f"START : {d[1]}\n"
-            f"SELESAI : {d[2]}\n\n"
-        )
-
-    kirim(text)
-
-
-# ==========================
-# TAMBAH JADWAL
-# ==========================
-def tambah_jadwal(text):
-
-    data = baca_csv()
+    if not os.path.exists(CSV_FILE):
+        return data
 
     try:
 
-        route, start, selesai = text.split("|")
+        with open(CSV_FILE, newline="", encoding="utf-8") as f:
 
-        route = route.strip()
-        start = format_waktu(start)
-        selesai = format_waktu(selesai)
+            reader = csv.DictReader(f)
 
-        data.append((route, start, selesai))
+            for row in reader:
 
-        simpan_csv(data)
+                route = (
+                    row.get("Route")
+                    or row.get("route")
+                    or ""
+                )
 
-        kirim("✅ Jadwal berhasil ditambah")
+                start = (
+                    row.get("Start Loading")
+                    or row.get("start")
+                    or ""
+                )
 
-    except:
-        kirim("❌ Format salah\nContoh:\nRoute | 01:00 | 02:00")
+                selesai = (
+                    row.get("Selesai loading")
+                    or row.get("selesai")
+                    or ""
+                )
+
+                start = format_waktu(start)
+                selesai = format_waktu(selesai)
+
+                if start:
+                    data.append(("START", route, start))
+
+                if selesai:
+                    data.append(("SELESAI", route, selesai))
+
+    except Exception as e:
+        print("CSV ERROR:", e)
+
+    return data
 
 
-# ==========================
-# HAPUS JADWAL
-# ==========================
-def hapus_jadwal(n):
+# ========================
+# COMMAND TELEGRAM
+# ========================
+def cek_command():
 
-    data = baca_csv()
+    global last_update
+
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+
+    params = {"timeout": 1}
+
+    if last_update:
+        params["offset"] = last_update + 1
 
     try:
 
-        n = int(n) - 1
+        r = requests.get(url, params=params).json()
 
-        if n < 0 or n >= len(data):
-            kirim("Nomor tidak ada")
-            return
+        for u in r["result"]:
 
-        data.pop(n)
+            last_update = u["update_id"]
 
-        simpan_csv(data)
+            if "message" not in u:
+                continue
 
-        kirim("✅ Jadwal dihapus")
+            msg = u["message"]
 
-    except:
-        kirim("Kirim nomor jadwal")
+            chat = str(msg["chat"]["id"])
 
+            if chat != CHAT_ID:
+                continue
 
-# ==========================
-# PROSES COMMAND TELEGRAM
-# ==========================
-def proses_telegram():
+            text = msg.get("text", "")
 
-    global last_update_id
-    global mode_tambah
+            if text == "/status":
 
-    updates = get_updates()
+                kirim(
+                    "✅ BOT AKTIF\n"
+                    + datetime.now().strftime("%H:%M:%S")
+                )
 
-    for u in updates:
+            elif text == "/testalarm":
 
-        last_update_id = u["update_id"]
+                kirim(
+                    "🔔 TEST ALARM\n"
+                    "📍 TEST ROUTE\n"
+                    "⏰ " + datetime.now().strftime("%H:%M")
+                )
 
-        if "message" not in u:
-            continue
+            elif text == "/jadwal":
 
-        msg = u["message"]
+                data = baca_csv()
 
-        if str(msg["chat"]["id"]) != CHAT_ID:
-            continue
+                if not data:
+                    kirim("Jadwal kosong")
+                    return
 
-        # ==================
-        # FILE CSV UPLOAD
-        # ==================
-        if "document" in msg:
+                msg_text = "📋 JADWAL ROUTE\n\n"
 
-            doc = msg["document"]
+                for jenis, route, waktu in data:
 
-            if doc["file_name"].endswith(".csv"):
+                    msg_text += f"{jenis} | {route} | {waktu}\n"
 
-                file_id = doc["file_id"]
+                kirim(msg_text)
 
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
+            elif text == "/reload":
 
-                r = requests.get(url).json()
+                kirim("♻️ CSV berhasil di reload")
 
-                file_path = r["result"]["file_path"]
+            # upload CSV
+            if "document" in msg:
 
-                download = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+                doc = msg["document"]
 
-                data = requests.get(download).content
+                if doc["file_name"].endswith(".csv"):
 
-                with open(CSV_FILE, "wb") as f:
-                    f.write(data)
+                    file_id = doc["file_id"]
 
-                kirim("✅ CSV berhasil diupload")
+                    r = requests.get(
+                        f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
+                    ).json()
 
-        # ==================
-        # TEXT COMMAND
-        # ==================
-        if "text" not in msg:
-            continue
+                    path = r["result"]["file_path"]
 
-        text = msg["text"]
+                    download = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{path}"
 
-        if text == "/jadwal":
-            kirim_jadwal()
+                    data = requests.get(download).content
 
-        elif text == "/tambah":
+                    with open(CSV_FILE, "wb") as f:
+                        f.write(data)
 
-            mode_tambah = True
+                    kirim("✅ CSV berhasil diupload")
 
-            kirim(
-                "Kirim format:\n"
-                "Route | Start | Selesai\n\n"
-                "Contoh:\n"
-                "Medan DC > Kisaran Hub | 01:00 | 02:00"
-            )
+    except Exception as e:
 
-        elif text == "/hapus":
-
-            kirim_jadwal()
-            kirim("Kirim nomor jadwal yang ingin dihapus")
-
-        elif mode_tambah:
-
-            tambah_jadwal(text)
-            mode_tambah = False
-
-        elif text.isdigit():
-
-            hapus_jadwal(text)
+        print("COMMAND ERROR:", e)
 
 
-# ==========================
-# ALARM JADWAL
-# ==========================
+# ========================
+# ALARM CHECK
+# ========================
 def cek_alarm():
 
     global today_date
@@ -260,67 +202,73 @@ def cek_alarm():
     now = now_dt.strftime("%H:%M")
 
     if today_date != now_dt.date():
+
         sent_today.clear()
         today_date = now_dt.date()
 
     data = baca_csv()
 
-    for route, start, selesai in data:
+    for jenis, route, waktu in data:
 
-        for jenis, waktu in [
-            ("START", start),
-            ("SELESAI", selesai),
-        ]:
+        key = (jenis, route, waktu, now_dt.date())
 
-            waktu = format_waktu(waktu)
+        if now == waktu and key not in sent_today:
 
-            key = (jenis, route, waktu, now_dt.date())
+            pesan = (
+                f"🔔 {jenis} LOADING\n"
+                f"📍 {route}\n"
+                f"⏰ {waktu} WIB"
+            )
 
-            if now == waktu and key not in sent_today:
+            kirim(pesan)
 
-                kirim(
-                    f"🔔 {jenis} LOADING\n"
-                    f"📍 {route}\n"
-                    f"⏰ {waktu} WIB"
-                )
+            print("ALARM:", pesan)
 
-                sent_today.add(key)
+            sent_today.add(key)
 
-            t_jadwal = datetime.strptime(waktu, "%H:%M").replace(
+        try:
+
+            t = datetime.strptime(waktu, "%H:%M").replace(
                 year=now_dt.year,
                 month=now_dt.month,
                 day=now_dt.day,
                 tzinfo=ZoneInfo("Asia/Jakarta"),
             )
 
-            if t_jadwal - timedelta(minutes=10) <= now_dt < t_jadwal:
+            if t - timedelta(minutes=10) <= now_dt < t:
 
                 key_r = ("REMINDER", jenis, route, waktu)
 
                 if key_r not in sent_today:
 
-                    kirim(
+                    pesan = (
                         f"⏳ H-10 MENIT {jenis}\n"
                         f"📍 {route}\n"
                         f"⏰ {waktu} WIB"
                     )
 
+                    kirim(pesan)
+
+                    print("REMINDER:", pesan)
+
                     sent_today.add(key_r)
 
+        except:
+            pass
 
-# ==========================
-# MAIN LOOP
-# ==========================
-print("🚀 BOT JADWAL AKTIF")
+
+print("🚀 BOT ROUTE ALARM AKTIF")
 
 while True:
 
     try:
 
-        proses_telegram()
+        cek_command()
         cek_alarm()
 
     except Exception as e:
-        print("ERROR:", e)
 
-    time.sleep(5)
+        print("CRASH:", e)
+        time.sleep(5)
+
+    time.sleep(10)
