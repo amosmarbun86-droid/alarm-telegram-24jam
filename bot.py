@@ -60,23 +60,23 @@ def baca_csv():
 
             for row in reader:
 
-                route = (
-                    row.get("Route")
-                    or row.get("route")
-                    or ""
-                )
+                route = ""
+                start = ""
+                selesai = ""
 
-                start = (
-                    row.get("Start Loading")
-                    or row.get("start")
-                    or ""
-                )
+                # baca semua kolom CSV
+                for k in row.keys():
 
-                selesai = (
-                    row.get("Selesai loading")
-                    or row.get("selesai")
-                    or ""
-                )
+                    key = k.lower().strip()
+
+                    if "route" in key:
+                        route = row[k].strip()
+
+                    if "start" in key:
+                        start = row[k]
+
+                    if "selesai" in key:
+                        selesai = row[k]
 
                 start = format_waktu(start)
                 selesai = format_waktu(selesai)
@@ -91,7 +91,6 @@ def baca_csv():
         print("CSV ERROR:", e)
 
     return data
-
 
 # ========================
 # COMMAND TELEGRAM
