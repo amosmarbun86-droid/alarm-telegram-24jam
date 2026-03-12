@@ -156,7 +156,7 @@ def cek_command():
             # =================
             # COMMAND JADWAL
             # =================
-            elif text == "/jadwal":
+            elif "/jadwal" in text:
 
                 data = baca_csv()
 
@@ -174,7 +174,7 @@ def cek_command():
             # =================
             # COMMAND RELOAD
             # =================
-            elif text == "/reload":
+            elif "/reload" in text:
 
                 kirim("♻️ CSV berhasil di reload")
 
