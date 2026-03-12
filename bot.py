@@ -52,18 +52,52 @@ def baca_csv():
     try:
         with open(CSV_FILE, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
+
+            # bersihkan header dari spasi
+            reader.fieldnames = [h.strip() for h in reader.fieldnames]
+
             for row in reader:
-                route = row.get("Route") or row.get("route") or ""
-                start = row.get("Start Loading") or row.get("start") or ""
-                selesai = row.get("Selesai loading") or row.get("selesai") or ""
+                # bersihkan setiap nilai
+                row = {k.strip(): (v.strip() if v else "") for k, v in row.items()}
+
+                # cari kemungkinan nama kolom route
+                route = (
+                    row.get("Route")
+                    or row.get("route")
+                    or row.get("ROUTE")
+                    or row.get("Route Wilayah")
+                    or row.get("Rute")
+                    or ""
+                )
+
+                # kemungkinan nama kolom start
+                start = (
+                    row.get("Start Loading")
+                    or row.get("start")
+                    or row.get("Start")
+                    or ""
+                )
+
+                # kemungkinan nama kolom selesai
+                selesai = (
+                    row.get("Selesai loading")
+                    or row.get("selesai")
+                    or row.get("Finish")
+                    or ""
+                )
+
                 start = format_waktu(start)
                 selesai = format_waktu(selesai)
+
                 if start:
                     data.append(("START", route, start))
+
                 if selesai:
                     data.append(("SELESAI", route, selesai))
+
     except Exception as e:
         print("CSV ERROR:", e)
+
     return data
 
 
