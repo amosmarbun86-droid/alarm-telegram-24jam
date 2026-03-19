@@ -21,11 +21,19 @@ last_update = None
 # ========================
 # SEND MESSAGE TELEGRAM
 # ========================
-def kirim(text):
+def kirim(text, keyboard=None):
     try:
+        payload = {
+            "chat_id": CHAT_ID,
+            "text": text,
+        }
+
+        if keyboard:
+            payload["reply_markup"] = keyboard
+
         requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": text},
+            json=payload,
         )
     except Exception as e:
         print("SEND ERROR:", e)
