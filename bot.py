@@ -8,8 +8,9 @@ from zoneinfo import ZoneInfo
 # ========================
 # CONFIG
 # ========================
-BOT_TOKEN = "8526408120:AAHqYHx3n9V3qpAqbp8_UDwfWed5SHC7Wbo"
-CHAT_ID = "8559067633"  # isi chat id Telegram Anda
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 CSV_FILE = "jadwal.csv"
 
 sent_today = set()
