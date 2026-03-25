@@ -4,6 +4,8 @@ import requests
 import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from flask import Flask
+from threading import Thread
 
 # ========================
 # CONFIG
@@ -16,6 +18,20 @@ sent_today = set()
 today_date = None
 last_update = None
 
+# ========================
+# FLASK WEB (RENDER)
+# ========================
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot Alarm Telegram Aktif 24 Jam"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+Thread(target=run_web).start()
 
 # ========================
 # MENU TOMBOL
@@ -28,9 +44,7 @@ def menu():
         ],
         "resize_keyboard": True
     }
-
     kirim("📌 MENU UTAMA", keyboard)
-
 
 # ========================
 # SEND TELEGRAM
@@ -53,7 +67,6 @@ def kirim(text, keyboard=None):
     except Exception as e:
         print("SEND ERROR:", e)
 
-
 # ========================
 # FORMAT WAKTU
 # ========================
@@ -63,7 +76,6 @@ def format_waktu(w):
         return t.strftime("%H:%M")
     except:
         return ""
-
 
 # ========================
 # READ CSV
@@ -81,31 +93,15 @@ def baca_csv():
             for row in reader:
                 row = {k.strip(): (v.strip() if v else "") for k, v in row.items()}
 
-                route = (
-                    row.get("Route")
-                    or row.get("route")
-                    or row.get("Rute")
-                    or ""
-                )
-
-                start = (
-                    row.get("Start Loading")
-                    or row.get("start")
-                    or ""
-                )
-
-                selesai = (
-                    row.get("Selesai loading")
-                    or row.get("selesai")
-                    or ""
-                )
+                route = row.get("Route") or row.get("route") or row.get("Rute") or ""
+                start = row.get("Start Loading") or row.get("start") or ""
+                selesai = row.get("Selesai loading") or row.get("selesai") or ""
 
                 start = format_waktu(start)
                 selesai = format_waktu(selesai)
 
                 if start:
                     data.append(("START", route, start))
-
                 if selesai:
                     data.append(("SELESAI", route, selesai))
 
@@ -113,7 +109,6 @@ def baca_csv():
         print("CSV ERROR:", e)
 
     return data
-
 
 # ========================
 # COMMAND TELEGRAM
@@ -129,7 +124,6 @@ def cek_command():
     try:
         r = requests.get(url, params=params).json()
         if not r.get("ok"):
-            print("Telegram API ERROR:", r)
             return
 
         for u in r.get("result", []):
@@ -147,23 +141,15 @@ def cek_command():
             if chat != CHAT_ID:
                 continue
 
-            # ========================
-            # MENU START
-            # ========================
             if "/start" in text:
                 menu()
                 continue
 
-            # ========================
-            # COMMAND
-            # ========================
             if "status" in text:
                 kirim(f"✅ BOT AKTIF\n{datetime.now().strftime('%H:%M:%S')}")
 
             elif "test" in text:
-                kirim(
-                    f"🔔 TEST ALARM\n📍 TEST ROUTE\n⏰ {datetime.now().strftime('%H:%M')}"
-                )
+                kirim(f"🔔 TEST ALARM\n⏰ {datetime.now().strftime('%H:%M')}")
 
             elif "jadwal" in text:
                 data = baca_csv()
@@ -178,9 +164,7 @@ def cek_command():
             elif "reload" in text:
                 kirim("♻️ CSV berhasil di reload")
 
-            # ========================
-            # UPLOAD CSV
-            # ========================
+            # Upload CSV
             if "document" in msg:
                 doc = msg["document"]
                 if doc["file_name"].endswith(".csv"):
@@ -197,14 +181,13 @@ def cek_command():
                         with open(CSV_FILE, "wb") as f:
                             f.write(data)
 
-                        kirim("✅ CSV berhasil diupload & langsung aktif")
+                        kirim("✅ CSV berhasil diupload & aktif")
 
                     except Exception as e:
                         kirim(f"❌ ERROR upload CSV: {e}")
 
     except Exception as e:
         print("COMMAND ERROR:", e)
-
 
 # ========================
 # ALARM SYSTEM
@@ -245,7 +228,6 @@ def cek_alarm():
                     sent_today.add(key_r)
         except:
             pass
-
 
 # ========================
 # MAIN LOOP
