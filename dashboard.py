@@ -1,5 +1,6 @@
 from flask import Flask, render_template_string, request, redirect
 import csv
+import os
 
 app = Flask(__name__)
 
@@ -47,7 +48,6 @@ def index():
         selesai = request.form["selesai"]
 
         with open(CSV_FILE,"a",newline="") as f:
-
             writer = csv.writer(f)
             writer.writerow([route,start,selesai])
 
@@ -56,13 +56,14 @@ def index():
     rows=[]
 
     with open(CSV_FILE) as f:
-
         reader = csv.reader(f)
         next(reader)
-
         for r in reader:
             rows.append(r)
 
     return render_template_string(HTML,rows=rows)
 
-app.run(host="0.0.0.0",port=5000)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
