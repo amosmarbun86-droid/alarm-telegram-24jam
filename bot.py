@@ -4,7 +4,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from flask import Flask
+from flask import Flask, request, redirect, render_template_string
 from threading import Thread
 
 # ========================
@@ -19,13 +19,68 @@ today_date = None
 last_update = None
 
 # ========================
-# FLASK WEB (RENDER)
+# FLASK DASHBOARD WEB
 # ========================
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "Bot Alarm Telegram Aktif 24 Jam"
+HTML = """
+<h2>Dashboard Jadwal Route</h2>
+
+<table border=1>
+<tr>
+<th>Route</th>
+<th>Start</th>
+<th>Selesai</th>
+</tr>
+
+{% for r in rows %}
+<tr>
+<td>{{r[0]}}</td>
+<td>{{r[1]}}</td>
+<td>{{r[2]}}</td>
+</tr>
+{% endfor %}
+</table>
+
+<h3>Tambah Jadwal</h3>
+
+<form method="post">
+Route:<br>
+<input name="route"><br>
+Start (HH:MM):<br>
+<input name="start"><br>
+Selesai (HH:MM):<br>
+<input name="selesai"><br><br>
+<button type="submit">Tambah</button>
+</form>
+"""
+
+@app.route("/", methods=["GET","POST"])
+def dashboard():
+    if request.method == "POST":
+        route = request.form["route"]
+        start = request.form["start"]
+        selesai = request.form["selesai"]
+
+        file_exists = os.path.exists(CSV_FILE)
+
+        with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["Route","Start Loading","Selesai loading"])
+            writer.writerow([route,start,selesai])
+
+        return redirect("/")
+
+    rows=[]
+    if os.path.exists(CSV_FILE):
+        with open(CSV_FILE, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            for r in reader:
+                rows.append(r)
+
+    return render_template_string(HTML, rows=rows)
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
@@ -34,7 +89,7 @@ def run_web():
 Thread(target=run_web).start()
 
 # ========================
-# MENU TOMBOL
+# MENU TELEGRAM
 # ========================
 def menu():
     keyboard = {
@@ -111,7 +166,7 @@ def baca_csv():
     return data
 
 # ========================
-# COMMAND TELEGRAM (Polling)
+# COMMAND TELEGRAM
 # ========================
 def cek_command():
     global last_update
@@ -164,40 +219,17 @@ def cek_command():
             elif "reload" in text:
                 kirim("♻️ CSV berhasil di reload")
 
-            # Upload CSV
-            if "document" in msg:
-                doc = msg["document"]
-                if doc["file_name"].endswith(".csv"):
-                    try:
-                        file_id = doc["file_id"]
-                        r = requests.get(
-                            f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
-                        ).json()
-
-                        path = r["result"]["file_path"]
-                        download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{path}"
-                        data = requests.get(download_url).content
-
-                        with open(CSV_FILE, "wb") as f:
-                            f.write(data)
-
-                        kirim("✅ CSV berhasil diupload & aktif")
-
-                    except Exception as e:
-                        kirim(f"❌ ERROR upload CSV: {e}")
-
     except Exception as e:
         print("COMMAND ERROR:", e)
 
 # ========================
-# ALARM SYSTEM FINAL
+# ALARM SYSTEM
 # ========================
 def cek_alarm():
     global today_date
 
     now_dt = datetime.now(ZoneInfo("Asia/Jakarta"))
 
-    # Reset harian
     if today_date != now_dt.date():
         sent_today.clear()
         today_date = now_dt.date()
@@ -215,17 +247,11 @@ def cek_alarm():
 
             key = (jenis, route, waktu, now_dt.date())
 
-            # =====================
-            # ALARM TEPAT WAKTU SAJA (NO RESTART RESEND)
-            # =====================
             selisih = abs((now_dt - jam_alarm).total_seconds())
             if selisih <= 30 and key not in sent_today:
                 kirim(f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB")
                 sent_today.add(key)
 
-            # =====================
-            # REMINDER H-10 MENIT
-            # =====================
             reminder_time = jam_alarm - timedelta(minutes=10)
             selisih_r = abs((now_dt - reminder_time).total_seconds())
             key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
