@@ -70,52 +70,12 @@ def kirim(text, keyboard=None):
 # ========================
 # FORMAT WAKTU
 # ========================
-def cek_alarm():
-    global today_date
-
-    now_dt = datetime.now(ZoneInfo("Asia/Jakarta"))
-
-    # Reset setiap hari
-    if today_date != now_dt.date():
-        sent_today.clear()
-        today_date = now_dt.date()
-
-    data = baca_csv()
-
-    for jenis, route, waktu in data:
-        try:
-            jam_alarm = datetime.strptime(waktu, "%H:%M").replace(
-                year=now_dt.year,
-                month=now_dt.month,
-                day=now_dt.day,
-                tzinfo=ZoneInfo("Asia/Jakarta"),
-            )
-
-            selisih = (now_dt - jam_alarm).total_seconds()
-            key = (jenis, route, waktu, now_dt.date())
-
-            # =========================
-            # ALARM UTAMA (MAX 10 MENIT SETELAH JADWAL)
-            # =========================
-            if 0 <= selisih <= 600 and key not in sent_today:
-                pesan = f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB"
-                kirim(pesan)
-                sent_today.add(key)
-
-            # =========================
-            # REMINDER H-10 MENIT
-            # =========================
-            reminder_time = jam_alarm - timedelta(minutes=10)
-            selisih_r = (now_dt - reminder_time).total_seconds()
-            key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
-
-            if 0 <= selisih_r <= 60 and key_r not in sent_today:
-                pesan = f"⏳ H-10 MENIT {jenis}\n📍 {route}\n⏰ {waktu} WIB"
-                kirim(pesan)
-                sent_today.add(key_r)
-
-        except Exception as e:
-            print("ALARM ERROR:", e)
+def format_waktu(w):
+    try:
+        t = datetime.strptime(w.strip(), "%H:%M")
+        return t.strftime("%H:%M")
+    except:
+        return ""
 
 # ========================
 # READ CSV
@@ -151,7 +111,7 @@ def baca_csv():
     return data
 
 # ========================
-# COMMAND TELEGRAM
+# COMMAND TELEGRAM (Polling)
 # ========================
 def cek_command():
     global last_update
@@ -230,14 +190,14 @@ def cek_command():
         print("COMMAND ERROR:", e)
 
 # ========================
-# ALARM SYSTEM
+# ALARM SYSTEM FINAL
 # ========================
 def cek_alarm():
     global today_date
 
     now_dt = datetime.now(ZoneInfo("Asia/Jakarta"))
-    now = now_dt.strftime("%H:%M")
 
+    # Reset harian
     if today_date != now_dt.date():
         sent_today.clear()
         today_date = now_dt.date()
@@ -245,36 +205,42 @@ def cek_alarm():
     data = baca_csv()
 
     for jenis, route, waktu in data:
-        key = (jenis, route, waktu, now_dt.date())
-
-        # Alarm utama
-        if now >= waktu and key not in sent_today:
-            pesan = f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB"
-            kirim(pesan)
-            sent_today.add(key)
-
-        # Reminder H-10 menit
         try:
-            t = datetime.strptime(waktu, "%H:%M").replace(
+            jam_alarm = datetime.strptime(waktu, "%H:%M").replace(
                 year=now_dt.year,
                 month=now_dt.month,
                 day=now_dt.day,
                 tzinfo=ZoneInfo("Asia/Jakarta"),
             )
 
-            if t - timedelta(minutes=10) <= now_dt < t:
-                key_r = ("REMINDER", jenis, route, waktu)
-                if key_r not in sent_today:
-                    pesan = f"⏳ H-10 MENIT {jenis}\n📍 {route}\n⏰ {waktu} WIB"
-                    kirim(pesan)
-                    sent_today.add(key_r)
-        except:
-            pass
+            key = (jenis, route, waktu, now_dt.date())
+
+            # =====================
+            # ALARM TEPAT WAKTU SAJA (NO RESTART RESEND)
+            # =====================
+            selisih = abs((now_dt - jam_alarm).total_seconds())
+            if selisih <= 30 and key not in sent_today:
+                kirim(f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB")
+                sent_today.add(key)
+
+            # =====================
+            # REMINDER H-10 MENIT
+            # =====================
+            reminder_time = jam_alarm - timedelta(minutes=10)
+            selisih_r = abs((now_dt - reminder_time).total_seconds())
+            key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
+
+            if selisih_r <= 30 and key_r not in sent_today:
+                kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}\n⏰ {waktu} WIB")
+                sent_today.add(key_r)
+
+        except Exception as e:
+            print("ALARM ERROR:", e)
 
 # ========================
 # MAIN LOOP
 # ========================
-print("🚀 BOT ROUTE ALARM AKTIF")
+print("🚀 BOT ROUTE ALARM AKTIF", datetime.now())
 
 while True:
     try:
