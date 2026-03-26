@@ -42,7 +42,6 @@ Selesai:<br>
 def index():
 
     if request.method == "POST":
-
         route = request.form["route"]
         start = request.form["start"]
         selesai = request.form["selesai"]
@@ -54,7 +53,6 @@ def index():
         return redirect("/")
 
     rows=[]
-
     with open(CSV_FILE) as f:
         reader = csv.reader(f)
         next(reader)
