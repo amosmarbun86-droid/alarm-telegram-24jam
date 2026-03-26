@@ -207,11 +207,13 @@ def cek_alarm():
     for jenis, route, waktu in data:
         key = (jenis, route, waktu, now_dt.date())
 
-        if now == waktu and key not in sent_today:
+        # Alarm utama
+        if now >= waktu and key not in sent_today:
             pesan = f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB"
             kirim(pesan)
             sent_today.add(key)
 
+        # Reminder H-10 menit
         try:
             t = datetime.strptime(waktu, "%H:%M").replace(
                 year=now_dt.year,
@@ -242,4 +244,4 @@ while True:
         print("CRASH:", e)
         time.sleep(5)
 
-    time.sleep(10)
+    time.sleep(1)
