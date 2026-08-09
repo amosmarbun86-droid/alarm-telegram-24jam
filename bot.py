@@ -32,6 +32,8 @@ HTML = """
 <th>Route</th>
 <th>Start</th>
 <th>Selesai</th>
+<th>Status</th>
+<th>Aksi</th>
 </tr>
 
 {% for r in rows %}
@@ -39,72 +41,187 @@ HTML = """
 <td>{{r[0]}}</td>
 <td>{{r[1]}}</td>
 <td>{{r[2]}}</td>
+<td>
+{% if status_list[loop.index0] == "proses" %}
+<b style="color:orange;">🟡 Sedang Proses</b>
+{% elif status_list[loop.index0] == "selesai" %}
+<b style="color:green;">✅ Selesai</b>
+{% endif %}
+</td>
+<td>
+<a href="/?edit={{loop.index0}}">Edit</a>
+&nbsp;|&nbsp;
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="delete">
+<input type="hidden" name="index" value="{{loop.index0}}">
+<input type="password" name="password" placeholder="password" style="width:90px">
+<button type="submit" onclick="return confirm('Yakin hapus baris ini?')">Hapus</button>
+</form>
+</td>
 </tr>
 {% endfor %}
 </table>
 
-<h3>Tambah Jadwal</h3>
+<h3>{{ "Edit Jadwal" if edit_index is not none else "Tambah Jadwal" }}</h3>
 
 {% if error %}
 <p style="color:red;">{{ error }}</p>
 {% endif %}
 
 <form method="post">
+<input type="hidden" name="action" value="{{ 'update' if edit_index is not none else 'add' }}">
+{% if edit_index is not none %}
+<input type="hidden" name="index" value="{{ edit_index }}">
+{% endif %}
 Route:<br>
-<input name="route"><br>
+<input name="route" value="{{ edit_route or '' }}"><br>
 Start (HH:MM):<br>
-<input name="start"><br>
+<input name="start" value="{{ edit_start or '' }}"><br>
 Selesai (HH:MM):<br>
-<input name="selesai"><br>
+<input name="selesai" value="{{ edit_selesai or '' }}"><br>
 Password:<br>
 <input type="password" name="password"><br><br>
-<button type="submit">Tambah</button>
+<button type="submit">{{ "Update" if edit_index is not none else "Tambah" }}</button>
+{% if edit_index is not none %}
+&nbsp;<a href="/">Batal</a>
+{% endif %}
 </form>
 """
 
-@app.route("/", methods=["GET","POST"])
-def dashboard():
-    if request.method == "POST":
-        password = request.form.get("password", "")
-
-        if not DASHBOARD_PASSWORD:
-            error = "Password server belum diset (DASHBOARD_PASSWORD kosong). Tambah data dinonaktifkan."
-        elif password != DASHBOARD_PASSWORD:
-            error = "Password salah. Data tidak ditambahkan."
-        else:
-            route = request.form["route"]
-            start = request.form["start"]
-            selesai = request.form["selesai"]
-
-            file_exists = os.path.exists(CSV_FILE)
-
-            with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                if not file_exists:
-                    writer.writerow(["Route","Start Loading","Selesai loading"])
-                writer.writerow([route,start,selesai])
-
-            return redirect("/")
-
-        rows=[]
-        if os.path.exists(CSV_FILE):
-            with open(CSV_FILE, newline="", encoding="utf-8") as f:
-                reader = csv.reader(f)
-                next(reader, None)
-                for r in reader:
-                    rows.append(r)
-
-        return render_template_string(HTML, rows=rows, error=error)
-
-    rows=[]
+def baca_rows():
+    rows = []
     if os.path.exists(CSV_FILE):
         with open(CSV_FILE, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             next(reader, None)
             for r in reader:
                 rows.append(r)
+    return rows
 
-    return render_template_string(HTML, rows=rows, error=None)
+def tulis_rows(rows):
+    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Route","Start Loading","Selesai loading"])
+        for r in rows:
+            writer.writerow(r)
+
+def hitung_status_list(rows):
+    """Kembalikan list string per baris: 'proses', 'selesai', atau '' (belum mulai/menunggu).
+    Menangani jadwal yang melewati tengah malam (misal Start 23:40, Selesai 00:20).
+
+    Aturan:
+    - Jadwal normal (Start <= Selesai, dalam hari yang sama):
+        sebelum Start        -> '' (menunggu)
+        Start s.d. Selesai    -> 'proses'
+        setelah Selesai       -> 'selesai'
+    - Jadwal lewat tengah malam (Start > Selesai):
+        antara Start s.d. tengah malam, atau tengah malam s.d. Selesai -> 'proses'
+        setelah Selesai s.d. sebelum Start berikutnya                 -> 'selesai'
+    """
+    now = datetime.now(ZoneInfo("Asia/Jakarta")).time()
+    hasil = []
+    for r in rows:
+        try:
+            start_t = datetime.strptime(r[1].strip(), "%H:%M").time()
+            selesai_t = datetime.strptime(r[2].strip(), "%H:%M").time()
+        except (ValueError, IndexError):
+            hasil.append("")
+            continue
+
+        if start_t <= selesai_t:
+            if now < start_t:
+                status = ""
+            elif now <= selesai_t:
+                status = "proses"
+            else:
+                status = "selesai"
+        else:
+            # rentang melewati tengah malam
+            if now >= start_t or now <= selesai_t:
+                status = "proses"
+            else:
+                # sudah lewat Selesai (pagi/siang), menunggu Start malam berikutnya
+                status = "selesai"
+
+        hasil.append(status)
+    return hasil
+
+@app.route("/", methods=["GET","POST"])
+def dashboard():
+    if request.method == "POST":
+        action = request.form.get("action", "add")
+        password = request.form.get("password", "")
+        rows = baca_rows()
+        error = None
+        edit_index = None
+
+        if not DASHBOARD_PASSWORD:
+            error = "Password server belum diset (DASHBOARD_PASSWORD kosong). Aksi dinonaktifkan."
+        elif password != DASHBOARD_PASSWORD:
+            error = "Password salah. Tidak ada perubahan data."
+        else:
+            if action == "add":
+                route = request.form.get("route", "")
+                start = request.form.get("start", "")
+                selesai = request.form.get("selesai", "")
+                rows.append([route, start, selesai])
+                tulis_rows(rows)
+                return redirect("/")
+
+            elif action == "update":
+                try:
+                    idx = int(request.form.get("index", "-1"))
+                except ValueError:
+                    idx = -1
+
+                if 0 <= idx < len(rows):
+                    route = request.form.get("route", "")
+                    start = request.form.get("start", "")
+                    selesai = request.form.get("selesai", "")
+                    rows[idx] = [route, start, selesai]
+                    tulis_rows(rows)
+                    return redirect("/")
+                else:
+                    error = "Data tidak ditemukan (mungkin sudah diubah)."
+
+            elif action == "delete":
+                try:
+                    idx = int(request.form.get("index", "-1"))
+                except ValueError:
+                    idx = -1
+
+                if 0 <= idx < len(rows):
+                    rows.pop(idx)
+                    tulis_rows(rows)
+                    return redirect("/")
+                else:
+                    error = "Data tidak ditemukan (mungkin sudah diubah)."
+
+        return render_template_string(
+            HTML, rows=rows, status_list=hitung_status_list(rows), error=error,
+            edit_index=None, edit_route=None, edit_start=None, edit_selesai=None
+        )
+
+    # GET
+    rows = baca_rows()
+    edit_index = None
+    edit_route = edit_start = edit_selesai = None
+
+    edit_param = request.args.get("edit")
+    if edit_param is not None:
+        try:
+            idx = int(edit_param)
+        except ValueError:
+            idx = -1
+        if 0 <= idx < len(rows):
+            edit_index = idx
+            edit_route, edit_start, edit_selesai = rows[idx]
+
+    return render_template_string(
+        HTML, rows=rows, status_list=hitung_status_list(rows), error=None,
+        edit_index=edit_index, edit_route=edit_route,
+        edit_start=edit_start, edit_selesai=edit_selesai
+    )
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
