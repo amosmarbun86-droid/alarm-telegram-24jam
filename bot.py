@@ -12,6 +12,7 @@ from threading import Thread
 # ========================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
 CSV_FILE = "jadwal.csv"
 
 sent_today = set()
@@ -44,13 +45,19 @@ HTML = """
 
 <h3>Tambah Jadwal</h3>
 
+{% if error %}
+<p style="color:red;">{{ error }}</p>
+{% endif %}
+
 <form method="post">
 Route:<br>
 <input name="route"><br>
 Start (HH:MM):<br>
 <input name="start"><br>
 Selesai (HH:MM):<br>
-<input name="selesai"><br><br>
+<input name="selesai"><br>
+Password:<br>
+<input type="password" name="password"><br><br>
 <button type="submit">Tambah</button>
 </form>
 """
@@ -58,19 +65,36 @@ Selesai (HH:MM):<br>
 @app.route("/", methods=["GET","POST"])
 def dashboard():
     if request.method == "POST":
-        route = request.form["route"]
-        start = request.form["start"]
-        selesai = request.form["selesai"]
+        password = request.form.get("password", "")
 
-        file_exists = os.path.exists(CSV_FILE)
+        if not DASHBOARD_PASSWORD:
+            error = "Password server belum diset (DASHBOARD_PASSWORD kosong). Tambah data dinonaktifkan."
+        elif password != DASHBOARD_PASSWORD:
+            error = "Password salah. Data tidak ditambahkan."
+        else:
+            route = request.form["route"]
+            start = request.form["start"]
+            selesai = request.form["selesai"]
 
-        with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow(["Route","Start Loading","Selesai loading"])
-            writer.writerow([route,start,selesai])
+            file_exists = os.path.exists(CSV_FILE)
 
-        return redirect("/")
+            with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(["Route","Start Loading","Selesai loading"])
+                writer.writerow([route,start,selesai])
+
+            return redirect("/")
+
+        rows=[]
+        if os.path.exists(CSV_FILE):
+            with open(CSV_FILE, newline="", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                next(reader, None)
+                for r in reader:
+                    rows.append(r)
+
+        return render_template_string(HTML, rows=rows, error=error)
 
     rows=[]
     if os.path.exists(CSV_FILE):
@@ -80,7 +104,7 @@ def dashboard():
             for r in reader:
                 rows.append(r)
 
-    return render_template_string(HTML, rows=rows)
+    return render_template_string(HTML, rows=rows, error=None)
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
