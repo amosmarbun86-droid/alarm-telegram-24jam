@@ -37,7 +37,7 @@ HTML = """
 </tr>
 
 {% for r in rows %}
-<tr>
+<tr style="background-color: {{ route_colors.get(r[0], '#FFFFFF') }};">
 <td>{{r[0]}}</td>
 <td>{{r[1]}}</td>
 <td>{{r[2]}}</td>
@@ -104,6 +104,29 @@ def tulis_rows(rows):
         writer.writerow(["Route","Start Loading","Selesai loading"])
         for r in rows:
             writer.writerow(r)
+
+# Palet warna pastel (24 warna) - cukup terang agar teks hitam tetap terbaca
+WARNA_PALET = [
+    "#FFD6D6", "#D6FFD6", "#D6E5FF", "#FFF3C4", "#E5D6FF",
+    "#D6FFF3", "#FFD6EC", "#E8FFD6", "#D6F0FF", "#FFE0C4",
+    "#F0D6FF", "#D6FFE0", "#FFEAA7", "#C4E5FF", "#FFC4D6",
+    "#D6FFC4", "#C4FFEA", "#FFC4F0", "#F0FFC4", "#C4D6FF",
+    "#FFDAB9", "#C4FFD6", "#E0C4FF", "#FFF0C4",
+]
+
+def hitung_route_colors(rows):
+    """Kembalikan dict {nama_route: kode_warna}. Route yang sama (nama persis sama)
+    selalu dapat warna yang sama, route berbeda dapat warna berbeda, urut
+    berdasarkan kemunculan pertama di data."""
+    route_colors = {}
+    for r in rows:
+        if not r:
+            continue
+        nama_route = r[0]
+        if nama_route not in route_colors:
+            warna = WARNA_PALET[len(route_colors) % len(WARNA_PALET)]
+            route_colors[nama_route] = warna
+    return route_colors
 
 def hitung_status_list(rows):
     """Kembalikan list string per baris: 'proses', 'selesai', atau '' (belum mulai/menunggu).
@@ -198,7 +221,8 @@ def dashboard():
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
 
         return render_template_string(
-            HTML, rows=rows, status_list=hitung_status_list(rows), error=error,
+            HTML, rows=rows, status_list=hitung_status_list(rows),
+            route_colors=hitung_route_colors(rows), error=error,
             edit_index=None, edit_route=None, edit_start=None, edit_selesai=None
         )
 
@@ -218,7 +242,8 @@ def dashboard():
             edit_route, edit_start, edit_selesai = rows[idx]
 
     return render_template_string(
-        HTML, rows=rows, status_list=hitung_status_list(rows), error=None,
+        HTML, rows=rows, status_list=hitung_status_list(rows),
+        route_colors=hitung_route_colors(rows), error=None,
         edit_index=edit_index, edit_route=edit_route,
         edit_start=edit_start, edit_selesai=edit_selesai
     )
