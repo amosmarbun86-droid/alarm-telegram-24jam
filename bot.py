@@ -13,7 +13,8 @@ from threading import Thread
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
-CSV_FILE = "jadwal.csv"
+FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL", "").rstrip("/")
+CSV_FILE = "jadwal.csv"  # hanya dipakai untuk migrasi data lama (sekali saja) ke Firebase
 
 sent_today = set()
 today_date = None
@@ -27,20 +28,26 @@ app = Flask(__name__)
 HTML = """
 <h2>Dashboard Jadwal Route</h2>
 
+{% if not firebase_ready %}
+<p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
+{% endif %}
+
 <table border=1>
 <tr>
 <th>Route</th>
+<th>Slot</th>
 <th>Start</th>
 <th>Selesai</th>
 <th>Status</th>
 <th>Aksi</th>
 </tr>
 
-{% for r in rows %}
+{% for key, r in rows %}
 <tr style="background-color: {{ route_colors.get(r[0], '#FFFFFF') }};">
 <td>{{r[0]}}</td>
 <td>{{r[1]}}</td>
 <td>{{r[2]}}</td>
+<td>{{r[3]}}</td>
 <td>
 {% if status_list[loop.index0] == "proses" %}
 <b style="color:orange;">🟡 Sedang Proses</b>
@@ -49,11 +56,11 @@ HTML = """
 {% endif %}
 </td>
 <td>
-<a href="/?edit={{loop.index0}}">Edit</a>
+<a href="/?edit={{ key }}">Edit</a>
 &nbsp;|&nbsp;
 <form method="post" style="display:inline">
 <input type="hidden" name="action" value="delete">
-<input type="hidden" name="index" value="{{loop.index0}}">
+<input type="hidden" name="key" value="{{ key }}">
 <input type="password" name="password" placeholder="password" style="width:90px">
 <button type="submit" onclick="return confirm('Yakin hapus baris ini?')">Hapus</button>
 </form>
@@ -62,48 +69,137 @@ HTML = """
 {% endfor %}
 </table>
 
-<h3>{{ "Edit Jadwal" if edit_index is not none else "Tambah Jadwal" }}</h3>
+<h3>{{ "Edit Jadwal" if edit_key else "Tambah Jadwal" }}</h3>
 
 {% if error %}
 <p style="color:red;">{{ error }}</p>
 {% endif %}
 
 <form method="post">
-<input type="hidden" name="action" value="{{ 'update' if edit_index is not none else 'add' }}">
-{% if edit_index is not none %}
-<input type="hidden" name="index" value="{{ edit_index }}">
+<input type="hidden" name="action" value="{{ 'update' if edit_key else 'add' }}">
+{% if edit_key %}
+<input type="hidden" name="key" value="{{ edit_key }}">
 {% endif %}
 Route:<br>
 <input name="route" value="{{ edit_route or '' }}"><br>
+Slot:<br>
+<input name="slot" value="{{ edit_slot or '' }}"><br>
 Start (HH:MM):<br>
 <input name="start" value="{{ edit_start or '' }}"><br>
 Selesai (HH:MM):<br>
 <input name="selesai" value="{{ edit_selesai or '' }}"><br>
 Password:<br>
 <input type="password" name="password"><br><br>
-<button type="submit">{{ "Update" if edit_index is not none else "Tambah" }}</button>
-{% if edit_index is not none %}
+<button type="submit">{{ "Update" if edit_key else "Tambah" }}</button>
+{% if edit_key %}
 &nbsp;<a href="/">Batal</a>
 {% endif %}
 </form>
 """
 
-def baca_rows():
-    rows = []
-    if os.path.exists(CSV_FILE):
-        with open(CSV_FILE, newline="", encoding="utf-8") as f:
-            reader = csv.reader(f)
-            next(reader, None)
-            for r in reader:
-                rows.append(r)
-    return rows
+# ========================
+# FIREBASE HELPERS (Realtime Database via REST API)
+# ========================
+def fb_url(path):
+    return f"{FIREBASE_DB_URL}/{path}.json"
 
-def tulis_rows(rows):
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Route","Start Loading","Selesai loading"])
-        for r in rows:
-            writer.writerow(r)
+def fb_get(path):
+    if not FIREBASE_DB_URL:
+        return None
+    try:
+        r = requests.get(fb_url(path), timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print("FIREBASE GET ERROR:", e)
+        return None
+
+def fb_post(path, data):
+    if not FIREBASE_DB_URL:
+        return None
+    try:
+        r = requests.post(fb_url(path), json=data, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print("FIREBASE POST ERROR:", e)
+        return None
+
+def fb_put(path, data):
+    if not FIREBASE_DB_URL:
+        return None
+    try:
+        r = requests.put(fb_url(path), json=data, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print("FIREBASE PUT ERROR:", e)
+        return None
+
+def fb_delete(path):
+    if not FIREBASE_DB_URL:
+        return False
+    try:
+        r = requests.delete(fb_url(path), timeout=10)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        print("FIREBASE DELETE ERROR:", e)
+        return False
+
+# ========================
+# DATA JADWAL (Firebase Realtime Database)
+# Struktur tiap entri: {"route":..., "slot":..., "start":..., "selesai":...}
+# ========================
+def baca_rows():
+    """Kembalikan list of (key, [route, slot, start, selesai]) terurut sesuai
+    urutan dibuat (push key Firebase terurut kronologis)."""
+    data = fb_get("jadwal")
+    if not data:
+        return []
+    hasil = []
+    for key in sorted(data.keys()):
+        item = data[key] or {}
+        route = item.get("route", "")
+        slot = item.get("slot", "")
+        start = item.get("start", "")
+        selesai = item.get("selesai", "")
+        hasil.append((key, [route, slot, start, selesai]))
+    return hasil
+
+def tambah_row(route, slot, start, selesai):
+    return fb_post("jadwal", {"route": route, "slot": slot, "start": start, "selesai": selesai})
+
+def update_row(key, route, slot, start, selesai):
+    return fb_put(f"jadwal/{key}", {"route": route, "slot": slot, "start": start, "selesai": selesai})
+
+def hapus_row(key):
+    return fb_delete(f"jadwal/{key}")
+
+def migrasi_csv_ke_firebase():
+    """Migrasi satu kali: kalau data Firebase masih kosong dan file CSV lama
+    ada, pindahkan isinya ke Firebase (slot dikosongkan, diisi manual belakangan)."""
+    if not FIREBASE_DB_URL:
+        print("⚠️  FIREBASE_DB_URL belum diset, migrasi dilewati.")
+        return
+
+    existing = fb_get("jadwal")
+    if existing:
+        print("Data sudah ada di Firebase, migrasi dilewati.")
+        return
+    if not os.path.exists(CSV_FILE):
+        return
+
+    print("Migrasi data dari jadwal.csv ke Firebase...")
+    jumlah = 0
+    with open(CSV_FILE, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        for r in reader:
+            if len(r) >= 3:
+                tambah_row(r[0], "", r[1], r[2])
+                jumlah += 1
+    print(f"Migrasi selesai: {jumlah} rute dipindahkan ke Firebase.")
 
 # Palet warna pastel (24 warna) - cukup terang agar teks hitam tetap terbaca
 WARNA_PALET = [
@@ -115,9 +211,7 @@ WARNA_PALET = [
 ]
 
 def hitung_route_colors(rows):
-    """Kembalikan dict {nama_route: kode_warna}. Route yang sama (nama persis sama)
-    selalu dapat warna yang sama, route berbeda dapat warna berbeda, urut
-    berdasarkan kemunculan pertama di data."""
+    """rows: list [route, slot, start, selesai]. Kembalikan dict {nama_route: kode_warna}."""
     route_colors = {}
     for r in rows:
         if not r:
@@ -129,24 +223,14 @@ def hitung_route_colors(rows):
     return route_colors
 
 def hitung_status_list(rows):
-    """Kembalikan list string per baris: 'proses', 'selesai', atau '' (belum mulai/menunggu).
-    Menangani jadwal yang melewati tengah malam (misal Start 23:40, Selesai 00:20).
-
-    Aturan:
-    - Jadwal normal (Start <= Selesai, dalam hari yang sama):
-        sebelum Start        -> '' (menunggu)
-        Start s.d. Selesai    -> 'proses'
-        setelah Selesai       -> 'selesai'
-    - Jadwal lewat tengah malam (Start > Selesai):
-        antara Start s.d. tengah malam, atau tengah malam s.d. Selesai -> 'proses'
-        setelah Selesai s.d. sebelum Start berikutnya                 -> 'selesai'
-    """
+    """rows: list [route, slot, start, selesai]. Kembalikan list string per baris:
+    'proses', 'selesai', atau '' (belum mulai/menunggu)."""
     now = datetime.now(ZoneInfo("Asia/Jakarta")).time()
     hasil = []
     for r in rows:
         try:
-            start_t = datetime.strptime(r[1].strip(), "%H:%M").time()
-            selesai_t = datetime.strptime(r[2].strip(), "%H:%M").time()
+            start_t = datetime.strptime(r[2].strip(), "%H:%M").time()
+            selesai_t = datetime.strptime(r[3].strip(), "%H:%M").time()
         except (ValueError, IndexError):
             hasil.append("")
             continue
@@ -159,11 +243,9 @@ def hitung_status_list(rows):
             else:
                 status = "selesai"
         else:
-            # rentang melewati tengah malam
             if now >= start_t or now <= selesai_t:
                 status = "proses"
             else:
-                # sudah lewat Selesai (pagi/siang), menunggu Start malam berikutnya
                 status = "selesai"
 
         hasil.append(status)
@@ -171,80 +253,76 @@ def hitung_status_list(rows):
 
 @app.route("/", methods=["GET","POST"])
 def dashboard():
+    firebase_ready = bool(FIREBASE_DB_URL)
+
     if request.method == "POST":
         action = request.form.get("action", "add")
         password = request.form.get("password", "")
         rows = baca_rows()
+        just_rows = [v for k, v in rows]
         error = None
-        edit_index = None
 
-        if not DASHBOARD_PASSWORD:
+        if not firebase_ready:
+            error = "FIREBASE_DB_URL belum diset. Aksi dinonaktifkan."
+        elif not DASHBOARD_PASSWORD:
             error = "Password server belum diset (DASHBOARD_PASSWORD kosong). Aksi dinonaktifkan."
         elif password != DASHBOARD_PASSWORD:
             error = "Password salah. Tidak ada perubahan data."
         else:
             if action == "add":
                 route = request.form.get("route", "")
+                slot = request.form.get("slot", "")
                 start = request.form.get("start", "")
                 selesai = request.form.get("selesai", "")
-                rows.append([route, start, selesai])
-                tulis_rows(rows)
+                tambah_row(route, slot, start, selesai)
                 return redirect("/")
 
             elif action == "update":
-                try:
-                    idx = int(request.form.get("index", "-1"))
-                except ValueError:
-                    idx = -1
-
-                if 0 <= idx < len(rows):
+                key = request.form.get("key", "")
+                if key:
                     route = request.form.get("route", "")
+                    slot = request.form.get("slot", "")
                     start = request.form.get("start", "")
                     selesai = request.form.get("selesai", "")
-                    rows[idx] = [route, start, selesai]
-                    tulis_rows(rows)
+                    update_row(key, route, slot, start, selesai)
                     return redirect("/")
                 else:
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
 
             elif action == "delete":
-                try:
-                    idx = int(request.form.get("index", "-1"))
-                except ValueError:
-                    idx = -1
-
-                if 0 <= idx < len(rows):
-                    rows.pop(idx)
-                    tulis_rows(rows)
+                key = request.form.get("key", "")
+                if key:
+                    hapus_row(key)
                     return redirect("/")
                 else:
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
 
         return render_template_string(
-            HTML, rows=rows, status_list=hitung_status_list(rows),
-            route_colors=hitung_route_colors(rows), error=error,
-            edit_index=None, edit_route=None, edit_start=None, edit_selesai=None
+            HTML, rows=rows, status_list=hitung_status_list(just_rows),
+            route_colors=hitung_route_colors(just_rows), error=error,
+            firebase_ready=firebase_ready,
+            edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None
         )
 
     # GET
     rows = baca_rows()
-    edit_index = None
-    edit_route = edit_start = edit_selesai = None
+    just_rows = [v for k, v in rows]
+    edit_key = None
+    edit_route = edit_slot = edit_start = edit_selesai = None
 
     edit_param = request.args.get("edit")
-    if edit_param is not None:
-        try:
-            idx = int(edit_param)
-        except ValueError:
-            idx = -1
-        if 0 <= idx < len(rows):
-            edit_index = idx
-            edit_route, edit_start, edit_selesai = rows[idx]
+    if edit_param:
+        for k, v in rows:
+            if k == edit_param:
+                edit_key = k
+                edit_route, edit_slot, edit_start, edit_selesai = v
+                break
 
     return render_template_string(
-        HTML, rows=rows, status_list=hitung_status_list(rows),
-        route_colors=hitung_route_colors(rows), error=None,
-        edit_index=edit_index, edit_route=edit_route,
+        HTML, rows=rows, status_list=hitung_status_list(just_rows),
+        route_colors=hitung_route_colors(just_rows), error=None,
+        firebase_ready=firebase_ready,
+        edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
         edit_start=edit_start, edit_selesai=edit_selesai
     )
 
@@ -253,6 +331,7 @@ def run_web():
     app.run(host="0.0.0.0", port=port)
 
 Thread(target=run_web).start()
+migrasi_csv_ke_firebase()
 
 # ========================
 # MENU TELEGRAM
@@ -299,35 +378,20 @@ def format_waktu(w):
         return ""
 
 # ========================
-# READ CSV
+# BACA DATA JADWAL UNTUK SISTEM ALARM (sumber: Firebase)
 # ========================
-def baca_csv():
+def baca_data_alarm():
+    """Kembalikan list tuple (jenis, route, slot, waktu) dari data Firebase."""
     data = []
-    if not os.path.exists(CSV_FILE):
-        return data
+    for key, r in baca_rows():
+        route, slot, start, selesai = r
+        start_fmt = format_waktu(start)
+        selesai_fmt = format_waktu(selesai)
 
-    try:
-        with open(CSV_FILE, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            reader.fieldnames = [h.strip() for h in reader.fieldnames]
-
-            for row in reader:
-                row = {k.strip(): (v.strip() if v else "") for k, v in row.items()}
-
-                route = row.get("Route") or row.get("route") or row.get("Rute") or ""
-                start = row.get("Start Loading") or row.get("start") or ""
-                selesai = row.get("Selesai loading") or row.get("selesai") or ""
-
-                start = format_waktu(start)
-                selesai = format_waktu(selesai)
-
-                if start:
-                    data.append(("START", route, start))
-                if selesai:
-                    data.append(("SELESAI", route, selesai))
-
-    except Exception as e:
-        print("CSV ERROR:", e)
+        if start_fmt:
+            data.append(("START", route, slot, start_fmt))
+        if selesai_fmt:
+            data.append(("SELESAI", route, slot, selesai_fmt))
 
     return data
 
@@ -373,17 +437,18 @@ def cek_command():
                 kirim(f"🔔 TEST ALARM\n⏰ {datetime.now().strftime('%H:%M')}")
 
             elif "jadwal" in text:
-                data = baca_csv()
+                data = baca_data_alarm()
                 if not data:
                     kirim("Jadwal kosong")
                 else:
                     msg_text = "📋 JADWAL ROUTE\n\n"
-                    for jenis, route, waktu in data:
-                        msg_text += f"{jenis} | {route} | {waktu}\n"
+                    for jenis, route, slot, waktu in data:
+                        slot_text = f" | Slot {slot}" if slot else ""
+                        msg_text += f"{jenis} | {route}{slot_text} | {waktu}\n"
                     kirim(msg_text)
 
             elif "reload" in text:
-                kirim("♻️ CSV berhasil di reload")
+                kirim("♻️ Data berhasil di reload dari Firebase")
 
     except Exception as e:
         print("COMMAND ERROR:", e)
@@ -400,9 +465,9 @@ def cek_alarm():
         sent_today.clear()
         today_date = now_dt.date()
 
-    data = baca_csv()
+    data = baca_data_alarm()
 
-    for jenis, route, waktu in data:
+    for jenis, route, slot, waktu in data:
         try:
             jam_alarm = datetime.strptime(waktu, "%H:%M").replace(
                 year=now_dt.year,
@@ -411,11 +476,13 @@ def cek_alarm():
                 tzinfo=ZoneInfo("Asia/Jakarta"),
             )
 
+            slot_line = f"\n🔢 Slot {slot}" if slot else ""
+
             key = (jenis, route, waktu, now_dt.date())
 
             selisih = abs((now_dt - jam_alarm).total_seconds())
             if selisih <= 30 and key not in sent_today:
-                kirim(f"🔔 {jenis} LOADING\n📍 {route}\n⏰ {waktu} WIB")
+                kirim(f"🔔 {jenis} LOADING\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
                 sent_today.add(key)
 
             reminder_time = jam_alarm - timedelta(minutes=10)
@@ -423,15 +490,13 @@ def cek_alarm():
             key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
 
             if selisih_r <= 30 and key_r not in sent_today:
-                kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}\n⏰ {waktu} WIB")
+                kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
                 sent_today.add(key_r)
 
         except Exception as e:
             print("ALARM ERROR:", e)
 
-# ========================
 # MAIN LOOP
-# ========================
 print("🚀 BOT ROUTE ALARM AKTIF", datetime.now())
 
 while True:
