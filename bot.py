@@ -2,9 +2,10 @@ import csv
 import time
 import requests
 import os
+import base64
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from flask import Flask, request, redirect, render_template_string
+from flask import Flask, request, redirect, render_template_string, Response
 from threading import Thread
 
 # ========================
@@ -16,6 +17,12 @@ DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL", "").rstrip("/")
 CSV_FILE = "jadwal.csv"  # hanya dipakai untuk migrasi data lama (sekali saja) ke Firebase
 
+# ========================
+# PWA: ICON (base64 PNG, tertanam langsung di kode - tidak perlu file terpisah)
+# ========================
+ICON_192_B64 = "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"
+ICON_512_B64 = "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"
+
 sent_today = set()
 today_date = None
 last_update = None
@@ -26,6 +33,38 @@ last_update = None
 app = Flask(__name__)
 
 HTML = """
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard Jadwal Route</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1C1C1E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Alarm 24 Jam">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+
+<style>
+body { font-family: sans-serif; background:#f4f4f4; margin:0; padding:12px; }
+table { border-collapse: collapse; width:100%; background:white; }
+th, td { padding:6px 8px; font-size:14px; }
+</style>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/service-worker.js');
+  });
+}
+</script>
+</head>
+<body>
+
 <h2>Dashboard Jadwal Route</h2>
 
 {% if not firebase_ready %}
@@ -95,6 +134,9 @@ Password:<br>
 &nbsp;<a href="/">Batal</a>
 {% endif %}
 </form>
+
+</body>
+</html>
 """
 
 # ========================
@@ -275,6 +317,55 @@ def hitung_status_list(rows):
 
         hasil.append(status)
     return hasil
+
+# ========================
+# PWA: MANIFEST, ICON, SERVICE WORKER
+# ========================
+@app.route("/manifest.json")
+def manifest():
+    data = {
+        "name": "Alarm Jadwal Loading 24 Jam",
+        "short_name": "Alarm24Jam",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#1C1C1E",
+        "theme_color": "#1C1C1E",
+        "orientation": "portrait",
+        "icons": [
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    import json
+    return Response(json.dumps(data), mimetype="application/manifest+json")
+
+@app.route("/icon-192.png")
+def icon_192():
+    return Response(base64.b64decode(ICON_192_B64), mimetype="image/png")
+
+@app.route("/icon-512.png")
+def icon_512():
+    return Response(base64.b64decode(ICON_512_B64), mimetype="image/png")
+
+@app.route("/service-worker.js")
+def service_worker():
+    js = """
+self.addEventListener('install', function(event) {
+  self.skipWaiting();
+});
+self.addEventListener('activate', function(event) {
+  event.waitUntil(self.clients.claim());
+});
+self.addEventListener('fetch', function(event) {
+  event.respondWith(
+    fetch(event.request).catch(function() {
+      return new Response('Anda sedang offline.', { status: 503, statusText: 'Offline' });
+    })
+  );
+});
+"""
+    return Response(js, mimetype="application/javascript")
 
 @app.route("/", methods=["GET","POST"])
 def dashboard():
