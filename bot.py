@@ -201,13 +201,14 @@ def migrasi_csv_ke_firebase():
                 jumlah += 1
     print(f"Migrasi selesai: {jumlah} rute dipindahkan ke Firebase.")
 
-# Palet warna pastel (24 warna) - cukup terang agar teks hitam tetap terbaca
+# Palet warna (24 warna, hue tersebar merata di roda warna) - dibuat jelas beda-beda
+# agar mudah dibedakan mata, tapi tetap cukup terang supaya teks hitam terbaca
 WARNA_PALET = [
-    "#FFD6D6", "#D6FFD6", "#D6E5FF", "#FFF3C4", "#E5D6FF",
-    "#D6FFF3", "#FFD6EC", "#E8FFD6", "#D6F0FF", "#FFE0C4",
-    "#F0D6FF", "#D6FFE0", "#FFEAA7", "#C4E5FF", "#FFC4D6",
-    "#D6FFC4", "#C4FFEA", "#FFC4F0", "#F0FFC4", "#C4D6FF",
-    "#FFDAB9", "#C4FFD6", "#E0C4FF", "#FFF0C4",
+    "#E68989", "#E6A089", "#E6B789", "#E6CE89", "#E6E689",
+    "#CEE689", "#B7E689", "#A0E689", "#89E689", "#89E6A0",
+    "#89E6B7", "#89E6CE", "#89E6E6", "#89CEE6", "#89B7E6",
+    "#89A0E6", "#8989E6", "#A089E6", "#B789E6", "#CE89E6",
+    "#E689E6", "#E689CE", "#E689B7", "#E689A0",
 ]
 
 def hitung_route_colors(rows):
