@@ -211,27 +211,27 @@ WARNA_PALET = [
     "#E689E6", "#E689CE", "#E689B7", "#E689A0",
 ]
 
-# Warna khusus untuk semua baris dengan Slot 1 (disamakan supaya tidak terlalu ramai)
-WARNA_SLOT_1 = "#D3D3D3"  # abu-abu netral, beda dari warna-warna rute di palet
+# Warna khusus untuk rute yang cuma punya 1 slot per hari (disamakan supaya tidak terlalu ramai)
+WARNA_SATU_SLOT = "#D3D3D3"  # abu-abu netral, beda dari warna-warna rute di palet
 
 def hitung_warna_baris(rows):
     """rows: list [route, slot, start, selesai]. Kembalikan list warna (1 warna per baris, urut sesuai rows).
 
-    Aturan:
-    - Baris dengan Slot == "1"  -> semua dapat warna sama (WARNA_SLOT_1)
-    - Baris dengan Slot lain (2, 3, dst) atau kosong -> warna beda-beda berdasarkan nama Rute,
-      seperti sebelumnya (rute yang sama = warna sama, rute beda = warna beda)
+    Aturan (berdasarkan RUTE, bukan angka Slot):
+    - Rute yang cuma muncul 1x (1 slot per hari)      -> warna abu-abu seragam (WARNA_SATU_SLOT)
+    - Rute yang muncul lebih dari 1x (>1 slot per hari) -> semua baris rute itu (termasuk yang
+      label Slot-nya "1") dapat SATU warna yang sama dari palet, beda dari rute lain
     """
-    # hitung mapping warna rute HANYA dari baris yang bukan Slot 1
+    from collections import Counter
+    jumlah_per_route = Counter(r[0] for r in rows if r)
+
+    # hitung mapping warna rute HANYA untuk rute yang muncul >1 kali (>1 slot per hari)
     route_colors = {}
     for r in rows:
         if not r:
             continue
-        slot = (r[1] or "").strip()
-        if slot == "1":
-            continue
         nama_route = r[0]
-        if nama_route not in route_colors:
+        if jumlah_per_route[nama_route] > 1 and nama_route not in route_colors:
             warna = WARNA_PALET[len(route_colors) % len(WARNA_PALET)]
             route_colors[nama_route] = warna
 
@@ -240,11 +240,11 @@ def hitung_warna_baris(rows):
         if not r:
             hasil.append("#FFFFFF")
             continue
-        slot = (r[1] or "").strip()
-        if slot == "1":
-            hasil.append(WARNA_SLOT_1)
+        nama_route = r[0]
+        if jumlah_per_route[nama_route] > 1:
+            hasil.append(route_colors[nama_route])
         else:
-            hasil.append(route_colors.get(r[0], "#FFFFFF"))
+            hasil.append(WARNA_SATU_SLOT)
     return hasil
 
 def hitung_status_list(rows):
