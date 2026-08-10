@@ -43,7 +43,7 @@ HTML = """
 </tr>
 
 {% for key, r in rows %}
-<tr style="background-color: {{ route_colors.get(r[0], '#FFFFFF') }};">
+<tr style="background-color: {{ warna_baris[loop.index0] }};">
 <td>{{r[0]}}</td>
 <td>{{r[1]}}</td>
 <td>{{r[2]}}</td>
@@ -211,17 +211,41 @@ WARNA_PALET = [
     "#E689E6", "#E689CE", "#E689B7", "#E689A0",
 ]
 
-def hitung_route_colors(rows):
-    """rows: list [route, slot, start, selesai]. Kembalikan dict {nama_route: kode_warna}."""
+# Warna khusus untuk semua baris dengan Slot 1 (disamakan supaya tidak terlalu ramai)
+WARNA_SLOT_1 = "#D3D3D3"  # abu-abu netral, beda dari warna-warna rute di palet
+
+def hitung_warna_baris(rows):
+    """rows: list [route, slot, start, selesai]. Kembalikan list warna (1 warna per baris, urut sesuai rows).
+
+    Aturan:
+    - Baris dengan Slot == "1"  -> semua dapat warna sama (WARNA_SLOT_1)
+    - Baris dengan Slot lain (2, 3, dst) atau kosong -> warna beda-beda berdasarkan nama Rute,
+      seperti sebelumnya (rute yang sama = warna sama, rute beda = warna beda)
+    """
+    # hitung mapping warna rute HANYA dari baris yang bukan Slot 1
     route_colors = {}
     for r in rows:
         if not r:
+            continue
+        slot = (r[1] or "").strip()
+        if slot == "1":
             continue
         nama_route = r[0]
         if nama_route not in route_colors:
             warna = WARNA_PALET[len(route_colors) % len(WARNA_PALET)]
             route_colors[nama_route] = warna
-    return route_colors
+
+    hasil = []
+    for r in rows:
+        if not r:
+            hasil.append("#FFFFFF")
+            continue
+        slot = (r[1] or "").strip()
+        if slot == "1":
+            hasil.append(WARNA_SLOT_1)
+        else:
+            hasil.append(route_colors.get(r[0], "#FFFFFF"))
+    return hasil
 
 def hitung_status_list(rows):
     """rows: list [route, slot, start, selesai]. Kembalikan list string per baris:
@@ -300,7 +324,7 @@ def dashboard():
 
         return render_template_string(
             HTML, rows=rows, status_list=hitung_status_list(just_rows),
-            route_colors=hitung_route_colors(just_rows), error=error,
+            warna_baris=hitung_warna_baris(just_rows), error=error,
             firebase_ready=firebase_ready,
             edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None
         )
@@ -321,7 +345,7 @@ def dashboard():
 
     return render_template_string(
         HTML, rows=rows, status_list=hitung_status_list(just_rows),
-        route_colors=hitung_route_colors(just_rows), error=None,
+        warna_baris=hitung_warna_baris(just_rows), error=None,
         firebase_ready=firebase_ready,
         edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
         edit_start=edit_start, edit_selesai=edit_selesai
