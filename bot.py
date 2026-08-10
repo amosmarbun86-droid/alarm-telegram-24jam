@@ -78,6 +78,7 @@ if ('serviceWorker' in navigator) {
 <th>Start</th>
 <th>Selesai</th>
 <th>Status</th>
+<th>Sandar</th>
 <th>Aksi</th>
 </tr>
 
@@ -92,6 +93,26 @@ if ('serviceWorker' in navigator) {
 <b style="color:orange;">🟡 Sedang Proses</b>
 {% elif status_list[loop.index0] == "selesai" %}
 <b style="color:green;">✅ Selesai</b>
+{% endif %}
+</td>
+<td>
+{% if sandar_list[loop.index0] %}
+<b style="color:#2E7D32;">🚛 Sudah Sandar</b><br>
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="toggle_sandar">
+<input type="hidden" name="key" value="{{ key }}">
+<input type="hidden" name="status" value="off">
+<input type="password" name="password" placeholder="password" style="width:80px">
+<button type="submit">Batalkan</button>
+</form>
+{% else %}
+<form method="post" style="display:inline">
+<input type="hidden" name="action" value="toggle_sandar">
+<input type="hidden" name="key" value="{{ key }}">
+<input type="hidden" name="status" value="on">
+<input type="password" name="password" placeholder="password" style="width:80px">
+<button type="submit">Tandai Sandar</button>
+</form>
 {% endif %}
 </td>
 <td>
@@ -189,12 +210,27 @@ def fb_delete(path):
         print("FIREBASE DELETE ERROR:", e)
         return False
 
+def fb_patch(path, data):
+    """Update sebagian field saja tanpa menghapus field lain yang tidak disebut
+    (beda dengan fb_put yang menimpa seluruh objek di path itu)."""
+    if not FIREBASE_DB_URL:
+        return None
+    try:
+        r = requests.patch(fb_url(path), json=data, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print("FIREBASE PATCH ERROR:", e)
+        return None
+
 # ========================
 # DATA JADWAL (Firebase Realtime Database)
-# Struktur tiap entri: {"route":..., "slot":..., "start":..., "selesai":...}
+# Struktur tiap entri: {"route":..., "slot":..., "start":..., "selesai":..., "sandar_tanggal":...}
+# "sandar_tanggal" diisi tanggal (YYYY-MM-DD, WIB) saat operator klik "Sudah Sandar".
+# Otomatis dianggap tidak aktif lagi kalau tanggalnya bukan hari ini (reset harian).
 # ========================
 def baca_rows():
-    """Kembalikan list of (key, [route, slot, start, selesai]) terurut sesuai
+    """Kembalikan list of (key, [route, slot, start, selesai, sandar_tanggal]) terurut sesuai
     urutan dibuat (push key Firebase terurut kronologis)."""
     data = fb_get("jadwal")
     if not data:
@@ -206,14 +242,35 @@ def baca_rows():
         slot = item.get("slot", "")
         start = item.get("start", "")
         selesai = item.get("selesai", "")
-        hasil.append((key, [route, slot, start, selesai]))
+        sandar_tanggal = item.get("sandar_tanggal", "")
+        hasil.append((key, [route, slot, start, selesai, sandar_tanggal]))
     return hasil
 
 def tambah_row(route, slot, start, selesai):
     return fb_post("jadwal", {"route": route, "slot": slot, "start": start, "selesai": selesai})
 
 def update_row(key, route, slot, start, selesai):
-    return fb_put(f"jadwal/{key}", {"route": route, "slot": slot, "start": start, "selesai": selesai})
+    # pakai PATCH (bukan PUT) supaya field "sandar_tanggal" yang sudah ada TIDAK ikut terhapus
+    return fb_patch(f"jadwal/{key}", {"route": route, "slot": slot, "start": start, "selesai": selesai})
+
+def set_sandar(key, aktif):
+    """Tandai/batalkan status 'Sudah Sandar' untuk satu baris."""
+    if aktif:
+        tanggal = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
+    else:
+        tanggal = ""
+    return fb_patch(f"jadwal/{key}", {"sandar_tanggal": tanggal})
+
+def is_sandar_hari_ini(sandar_tanggal):
+    """True kalau sandar_tanggal persis hari ini (WIB) - otherwise dianggap sudah reset."""
+    if not sandar_tanggal:
+        return False
+    today_str = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
+    return sandar_tanggal == today_str
+
+def hitung_sandar_list(rows):
+    """rows: list [route, slot, start, selesai, sandar_tanggal]. Kembalikan list boolean per baris."""
+    return [is_sandar_hari_ini(r[4] if len(r) > 4 else "") for r in rows]
 
 def hapus_row(key):
     return fb_delete(f"jadwal/{key}")
@@ -413,9 +470,19 @@ def dashboard():
                 else:
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
 
+            elif action == "toggle_sandar":
+                key = request.form.get("key", "")
+                status_baru = request.form.get("status", "on")
+                if key:
+                    set_sandar(key, status_baru == "on")
+                    return redirect("/")
+                else:
+                    error = "Data tidak ditemukan (mungkin sudah diubah)."
+
         return render_template_string(
             HTML, rows=rows, status_list=hitung_status_list(just_rows),
-            warna_baris=hitung_warna_baris(just_rows), error=error,
+            warna_baris=hitung_warna_baris(just_rows),
+            sandar_list=hitung_sandar_list(just_rows), error=error,
             firebase_ready=firebase_ready,
             edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None
         )
@@ -431,12 +498,13 @@ def dashboard():
         for k, v in rows:
             if k == edit_param:
                 edit_key = k
-                edit_route, edit_slot, edit_start, edit_selesai = v
+                edit_route, edit_slot, edit_start, edit_selesai = v[0], v[1], v[2], v[3]
                 break
 
     return render_template_string(
         HTML, rows=rows, status_list=hitung_status_list(just_rows),
-        warna_baris=hitung_warna_baris(just_rows), error=None,
+        warna_baris=hitung_warna_baris(just_rows),
+        sandar_list=hitung_sandar_list(just_rows), error=None,
         firebase_ready=firebase_ready,
         edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
         edit_start=edit_start, edit_selesai=edit_selesai
@@ -500,7 +568,7 @@ def baca_data_alarm():
     """Kembalikan list tuple (jenis, route, slot, waktu) dari data Firebase."""
     data = []
     for key, r in baca_rows():
-        route, slot, start, selesai = r
+        route, slot, start, selesai = r[0], r[1], r[2], r[3]
         start_fmt = format_waktu(start)
         selesai_fmt = format_waktu(selesai)
 
