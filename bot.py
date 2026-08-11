@@ -3,6 +3,7 @@ import time
 import requests
 import os
 import base64
+import urllib.parse
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request, redirect, render_template_string, Response
@@ -84,7 +85,13 @@ if ('serviceWorker' in navigator) {
 
 {% for key, r in rows %}
 <tr style="background-color: {{ warna_baris[loop.index0] }};">
-<td>{{r[0]}}</td>
+<td>
+{% if maps_links[loop.index0] %}
+<a href="{{ maps_links[loop.index0] }}" target="_blank" rel="noopener" style="color:#0645AD;">{{r[0]}}</a>
+{% else %}
+{{r[0]}}
+{% endif %}
+</td>
 <td>{{r[1]}}</td>
 <td>{{r[2]}}</td>
 <td>{{r[3]}}</td>
@@ -268,9 +275,21 @@ def is_sandar_hari_ini(sandar_tanggal):
     today_str = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
     return sandar_tanggal == today_str
 
-def hitung_sandar_list(rows):
-    """rows: list [route, slot, start, selesai, sandar_tanggal]. Kembalikan list boolean per baris."""
-    return [is_sandar_hari_ini(r[4] if len(r) > 4 else "") for r in rows]
+def hitung_sandar_list(rows, status_list):
+    """rows: list [route, slot, start, selesai, sandar_tanggal]. status_list: hasil hitung_status_list
+    (sejajar urutannya dengan rows). Kembalikan list boolean per baris.
+
+    'Sudah Sandar' otomatis dianggap tidak aktif lagi kalau:
+    - tanggal tandanya bukan hari ini (reset harian), ATAU
+    - loading rute itu sudah berstatus 'selesai' (otomatis hilang begitu loading kelar)
+    """
+    hasil = []
+    for r, status in zip(rows, status_list):
+        aktif = is_sandar_hari_ini(r[4] if len(r) > 4 else "")
+        if status == "selesai":
+            aktif = False
+        hasil.append(aktif)
+    return hasil
 
 def hapus_row(key):
     return fb_delete(f"jadwal/{key}")
@@ -312,6 +331,25 @@ WARNA_PALET = [
 
 # Warna khusus untuk rute yang cuma punya 1 slot per hari (disamakan supaya tidak terlalu ramai)
 WARNA_SATU_SLOT = "#D3D3D3"  # abu-abu netral, beda dari warna-warna rute di palet
+
+def buat_link_maps(nama_rute):
+    """Ubah nama rute (format: 'Siborong - Borong DC > Hub1 - Hub2 - Hub3') jadi link
+    Google Maps directions dari Siborong - Borong DC, lewat tiap hub berurutan, sampai hub terakhir.
+    Kembalikan None kalau format rute tidak sesuai (tidak ada tanda '>')."""
+    if not nama_rute or ">" not in nama_rute:
+        return None
+
+    asal_bagian, hub_bagian = nama_rute.split(">", 1)
+    asal = asal_bagian.strip()
+    hub_list = [h.strip() for h in hub_bagian.strip().split(" - ") if h.strip()]
+
+    if not asal or not hub_list:
+        return None
+
+    titik_titik = [asal] + hub_list
+    # tambahkan konteks wilayah supaya Google Maps lebih akurat mencocokkan nama hub
+    titik_encoded = [urllib.parse.quote(f"{t}, Sumatera Utara") for t in titik_titik]
+    return "https://www.google.com/maps/dir/" + "/".join(titik_encoded)
 
 def hitung_warna_baris(rows):
     """rows: list [route, slot, start, selesai]. Kembalikan list warna (1 warna per baris, urut sesuai rows).
@@ -479,10 +517,12 @@ def dashboard():
                 else:
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
 
+        status_list_hasil = hitung_status_list(just_rows)
         return render_template_string(
-            HTML, rows=rows, status_list=hitung_status_list(just_rows),
+            HTML, rows=rows, status_list=status_list_hasil,
             warna_baris=hitung_warna_baris(just_rows),
-            sandar_list=hitung_sandar_list(just_rows), error=error,
+            sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
+            maps_links=[buat_link_maps(r[0]) for r in just_rows], error=error,
             firebase_ready=firebase_ready,
             edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None
         )
@@ -501,10 +541,12 @@ def dashboard():
                 edit_route, edit_slot, edit_start, edit_selesai = v[0], v[1], v[2], v[3]
                 break
 
+    status_list_hasil = hitung_status_list(just_rows)
     return render_template_string(
-        HTML, rows=rows, status_list=hitung_status_list(just_rows),
+        HTML, rows=rows, status_list=status_list_hasil,
         warna_baris=hitung_warna_baris(just_rows),
-        sandar_list=hitung_sandar_list(just_rows), error=None,
+        sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
+        maps_links=[buat_link_maps(r[0]) for r in just_rows], error=None,
         firebase_ready=firebase_ready,
         edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
         edit_start=edit_start, edit_selesai=edit_selesai
