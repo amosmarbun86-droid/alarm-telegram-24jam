@@ -11,6 +11,15 @@ os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
 latest_announcement = {"id": None, "text": None, "audio_url": None}
 
+# Deskripsi situasi per jenis alarm - dipakai untuk menyusun prompt ke Groq
+JENIS_DESKRIPSI = {
+    "START": "mobil akan mulai loading barang sekarang",
+    "SELESAI": "loading barang sudah selesai sekarang",
+    "REMINDER": "pengingat, waktu loading tinggal 10 menit lagi",
+    "REMINDER_SELESAI": "pengingat, loading akan selesai dalam 15 menit lagi",
+    "SANDAR": "mobil untuk rute tujuan ini sudah sandar/tiba di lokasi",
+}
+
 
 def buat_pengumuman(jenis, route, slot, waktu):
     """Generate teks pengumuman via Groq, lalu convert ke audio (gTTS).
@@ -21,12 +30,11 @@ def buat_pengumuman(jenis, route, slot, waktu):
 
     try:
         slot_text = f" slot {slot}," if slot else ""
+        deskripsi = JENIS_DESKRIPSI.get(jenis, jenis)
         prompt = (
             f"Buatkan satu kalimat pengumuman singkat dan formal untuk sistem alarm "
-            f"logistik pengiriman barang menggunakan mobil/truk. Jenis: {jenis} "
-            f"(LOADING = mobil siap loading barang sekarang, "
-            f"REMINDER = pengingat 10 menit sebelum loading). Rute: {route},{slot_text} "
-            f"jam {waktu} WIB. Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
+            f"logistik pengiriman barang menggunakan mobil/truk. Situasi: {deskripsi}. "
+            f"Rute: {route},{slot_text} jam {waktu} WIB. Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
         )
 
         response = groq_client.chat.completions.create(
