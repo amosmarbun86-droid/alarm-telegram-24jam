@@ -43,7 +43,8 @@ def buat_pengumuman(jenis, route, slot, waktu):
         slot_text = f" slot {slot}," if slot else ""
         prompt = (
             f"Buatkan satu kalimat pengumuman singkat dan formal untuk sistem alarm "
-            f"logistik pelabuhan. Jenis: {jenis} (LOADING = kapal siap loading sekarang, "
+            f"logistik pengiriman barang menggunakan mobil/truk. Jenis: {jenis} "
+            f"(LOADING = mobil siap loading barang sekarang, "
             f"REMINDER = pengingat 10 menit sebelum loading). Rute: {route},{slot_text} "
             f"jam {waktu} WIB. Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
         )
