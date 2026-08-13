@@ -78,18 +78,6 @@ if ('serviceWorker' in navigator) {
 <p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
 {% endif %}
 
-<table border=1>
-<tr>
-<th>Route</th>
-<th>Slot</th>
-<th>Start</th>
-<th>Selesai</th>
-<th>Status</th>
-<th>Sandar</th>
-<th>Aksi</th>
-</tr>
-</table>
-
 <div id="tabelWrap">
 {{ tabel_html|safe }}
 </div>
@@ -580,6 +568,24 @@ def api_latest_announcement():
     from flask import jsonify
     return jsonify(latest_announcement)
     
+def render_tabel(rows):
+    """Render isi tabel dashboard agar bisa dipakai oleh halaman utama dan AJAX."""
+    just_rows = [v for k, v in rows]
+    status_list_hasil = hitung_status_list(just_rows)
+    return render_template_string(
+        TABEL_HTML,
+        rows=rows,
+        status_list=status_list_hasil,
+        warna_baris=hitung_warna_baris(just_rows),
+        sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
+        maps_links=[buat_link_maps(r[0]) for r in just_rows]
+    )
+
+@app.route("/partial-table")
+def partial_table():
+    """Endpoint AJAX untuk memperbarui isi tabel tanpa reload halaman."""
+    return render_tabel(baca_rows())
+
 @app.route("/", methods=["GET","POST"])
 def dashboard():
     firebase_ready = bool(FIREBASE_DB_URL)
@@ -650,6 +656,7 @@ def dashboard():
             sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
             maps_links=[buat_link_maps(r[0]) for r in just_rows], error=error,
             firebase_ready=firebase_ready,
+            tabel_html=render_tabel(rows),
             edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None
         )
 
@@ -674,6 +681,7 @@ def dashboard():
         sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
         maps_links=[buat_link_maps(r[0]) for r in just_rows], error=None,
         firebase_ready=firebase_ready,
+        tabel_html=render_tabel(rows),
         edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
         edit_start=edit_start, edit_selesai=edit_selesai
     )
