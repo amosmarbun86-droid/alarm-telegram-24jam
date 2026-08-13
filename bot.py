@@ -120,6 +120,10 @@ if ('serviceWorker' in navigator) {
 
 <h2>Dashboard Jadwal Route</h2>
 
+<button id="aktifkanSuara" style="padding:8px 16px; margin-bottom:10px;">🔊 Aktifkan Suara Pengumuman</button>
+<div id="pengumumanText" style="margin-bottom:10px; font-weight:bold; color:#2E7D32;"></div>
+<audio id="audioPlayer"></audio>
+
 {% if not firebase_ready %}
 <p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
 {% endif %}
@@ -214,6 +218,38 @@ Password:<br>
 &nbsp;<a href="/">Batal</a>
 {% endif %}
 </form>
+
+<script>
+let lastAnnouncementId = null;
+let suaraAktif = false;
+
+document.getElementById('aktifkanSuara').addEventListener('click', () => {
+    suaraAktif = true;
+    document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+});
+
+async function cekPengumuman() {
+    try {
+        const res = await fetch('/api/latest-announcement');
+        const data = await res.json();
+
+        if (data.id && data.id !== lastAnnouncementId) {
+            lastAnnouncementId = data.id;
+            document.getElementById('pengumumanText').textContent = data.text;
+
+            if (suaraAktif) {
+                const player = document.getElementById('audioPlayer');
+                player.src = data.audio_url;
+                player.play();
+            }
+        }
+    } catch (e) {
+        console.error('Polling error:', e);
+    }
+}
+
+setInterval(cekPengumuman, 5000);
+</script>
 
 </body>
 </html>
