@@ -555,6 +555,14 @@ def dashboard():
                 status_baru = request.form.get("status", "on")
                 if key:
                     set_sandar(key, status_baru == "on")
+                    if status_baru == "on":
+                        # Cari nama rute & slot dari data yang sudah dibaca, lalu
+                        # trigger pengumuman suara "sudah sandar" untuk rute itu
+                        for k, v in rows:
+                            if k == key:
+                                waktu_sandar = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%H:%M")
+                                buat_pengumuman("SANDAR", v[0], v[1], waktu_sandar)
+                                break
                     return redirect("/")
                 else:
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
@@ -754,14 +762,27 @@ def cek_alarm():
                 buat_pengumuman(jenis, route, slot, waktu)
                 sent_today.add(key)
 
-            reminder_time = jam_alarm - timedelta(minutes=10)
-            selisih_r = abs((now_dt - reminder_time).total_seconds())
-            key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
+            if jenis == "START":
+                # Reminder 10 menit sebelum mulai loading
+                reminder_time = jam_alarm - timedelta(minutes=10)
+                selisih_r = abs((now_dt - reminder_time).total_seconds())
+                key_r = ("REMINDER", jenis, route, waktu, now_dt.date())
 
-            if selisih_r <= 30 and key_r not in sent_today:
-                kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
-                buat_pengumuman("REMINDER", route, slot, waktu)
-                sent_today.add(key_r)
+                if selisih_r <= 30 and key_r not in sent_today:
+                    kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
+                    buat_pengumuman("REMINDER", route, slot, waktu)
+                    sent_today.add(key_r)
+
+            elif jenis == "SELESAI":
+                # Reminder 15 menit sebelum selesai loading
+                reminder15_time = jam_alarm - timedelta(minutes=15)
+                selisih_15 = abs((now_dt - reminder15_time).total_seconds())
+                key_15 = ("REMINDER15", jenis, route, waktu, now_dt.date())
+
+                if selisih_15 <= 30 and key_15 not in sent_today:
+                    kirim(f"⏳ H-15 MENIT SELESAI LOADING\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
+                    buat_pengumuman("REMINDER_SELESAI", route, slot, waktu)
+                    sent_today.add(key_15)
 
         except Exception as e:
             print("ALARM ERROR:", e)
