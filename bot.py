@@ -17,6 +17,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL", "").rstrip("/")
+FIREBASE_SECRET = os.getenv("FIREBASE_SECRET", "")
 CSV_FILE = "jadwal.csv"  # hanya dipakai untuk migrasi data lama (sekali saja) ke Firebase
 
 # ========================
@@ -280,7 +281,10 @@ Password:<br>
 # FIREBASE HELPERS (Realtime Database via REST API)
 # ========================
 def fb_url(path):
-    return f"{FIREBASE_DB_URL}/{path}.json"
+    url = f"{FIREBASE_DB_URL}/{path}.json"
+    if FIREBASE_SECRET:
+        url += f"?auth={FIREBASE_SECRET}"
+    return url
 
 def fb_get(path):
     if not FIREBASE_DB_URL:
