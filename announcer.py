@@ -1,5 +1,8 @@
 import os
 import uuid
+import wave
+import struct
+import math
 from groq import Groq
 from gtts import gTTS
 
@@ -10,6 +13,42 @@ AUDIO_FOLDER = "static/audio"
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
 latest_announcement = {"id": None, "text": None, "audio_url": None}
+
+ALARM_SOUND_PATH = os.path.join(AUDIO_FOLDER, "alarm.wav")
+ALARM_SOUND_URL = "/static/audio/alarm.wav"
+
+
+def _generate_alarm_sound():
+    """Bikin file suara alarm (bip nada tinggi, berulang 3x) sekali saat aplikasi
+    start. Dipakai sebagai suara pembuka sebelum pengumuman suara (TTS) diputar.
+    Di-generate langsung pakai Python (modul wave bawaan), tidak perlu file dari luar."""
+    if os.path.exists(ALARM_SOUND_PATH):
+        return
+
+    framerate = 22050
+    freq = 1500       # Hz - nada tinggi khas alarm
+    beep_duration = 0.3
+    gap_duration = 0.15
+    repeats = 3
+
+    frames = bytearray()
+    for _ in range(repeats):
+        for i in range(int(framerate * beep_duration)):
+            value = int(32767 * 0.6 * math.sin(2 * math.pi * freq * i / framerate))
+            frames += struct.pack('<h', value)
+        for i in range(int(framerate * gap_duration)):
+            frames += struct.pack('<h', 0)
+
+    with wave.open(ALARM_SOUND_PATH, 'w') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(framerate)
+        wf.writeframes(bytes(frames))
+
+    print("🔔 Suara alarm berhasil dibuat:", ALARM_SOUND_PATH)
+
+
+_generate_alarm_sound()
 
 # Deskripsi situasi per jenis alarm - dipakai untuk menyusun prompt ke Groq
 JENIS_DESKRIPSI = {
