@@ -171,9 +171,17 @@ Password:<br>
 <script>
 let lastAnnouncementId = null;
 let suaraAktif = false;
+let sudahInit = false;
+
+// Pulihkan status "Suara Aktif" supaya tidak hilang tiap kali halaman auto-refresh
+if (localStorage.getItem('suaraAktif') === '1') {
+    suaraAktif = true;
+    document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+}
 
 document.getElementById('aktifkanSuara').addEventListener('click', () => {
     suaraAktif = true;
+    localStorage.setItem('suaraAktif', '1');
     document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
 });
 
@@ -181,6 +189,16 @@ async function cekPengumuman() {
     try {
         const res = await fetch('/api/latest-announcement');
         const data = await res.json();
+
+        if (!sudahInit) {
+            // Baseline pertama kali load/refresh - jangan auto-play data LAMA yang sudah ada
+            lastAnnouncementId = data.id;
+            sudahInit = true;
+            if (data.id) {
+                document.getElementById('pengumumanText').textContent = data.text;
+            }
+            return;
+        }
 
         if (data.id && data.id !== lastAnnouncementId) {
             lastAnnouncementId = data.id;
@@ -198,6 +216,15 @@ async function cekPengumuman() {
 }
 
 setInterval(cekPengumuman, 5000);
+
+// Auto-refresh tampilan tabel jadwal tiap 30 detik supaya status/warna ikut update
+// tanpa perlu di-refresh manual. Dilewati kalau lagi ngetik di form (input/password).
+setInterval(() => {
+    const tagAktif = document.activeElement.tagName;
+    if (tagAktif !== 'INPUT' && tagAktif !== 'TEXTAREA') {
+        location.reload();
+    }
+}, 30000);
 </script>
 
 </body>
