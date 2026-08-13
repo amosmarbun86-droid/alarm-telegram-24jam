@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request, redirect, render_template_string, Response
 from threading import Thread
-from announcer import buat_pengumuman, latest_announcement
+from announcer import buat_pengumuman, latest_announcement, ALARM_SOUND_URL
 
 # ========================
 # CONFIG
@@ -143,7 +143,13 @@ async function cekPengumuman() {
 
             if (suaraAktif) {
                 const player = document.getElementById('audioPlayer');
-                player.src = data.audio_url;
+                // Putar suara alarm dulu, begitu selesai baru lanjut suara pengumuman (TTS)
+                player.src = '/static/audio/alarm.wav';
+                player.onended = () => {
+                    player.onended = null;
+                    player.src = data.audio_url;
+                    player.play();
+                };
                 player.play();
             }
         }
