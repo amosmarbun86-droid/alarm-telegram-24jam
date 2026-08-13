@@ -862,3 +862,18 @@ def cek_alarm():
 
         except Exception as e:
             print("ALARM ERROR:", e)
+
+# ========================
+# MAIN LOOP
+# ========================
+print("🚀 BOT ROUTE ALARM AKTIF", datetime.now())
+
+while True:
+    try:
+        cek_command()
+        cek_alarm()
+    except Exception as e:
+        print("CRASH:", e)
+        time.sleep(5)
+
+    time.sleep(1)
