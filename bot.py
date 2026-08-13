@@ -73,6 +73,8 @@ if ('serviceWorker' in navigator) {
 <div id="pengumumanText" style="margin-bottom:10px; font-weight:bold; color:#2E7D32;"></div>
 <audio id="audioPlayer"></audio>
 
+<div id="debugLog" style="font-size:11px; color:#555; background:#eee; padding:6px; margin-bottom:10px; max-height:120px; overflow-y:auto; white-space:pre-wrap; border-radius:4px;">Debug log suara: (kosong)</div>
+
 {% if not firebase_ready %}
 <p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
 {% endif %}
@@ -173,24 +175,123 @@ let lastAnnouncementId = null;
 let suaraAktif = false;
 let sudahInit = false;
 
+// Tampilkan pesan debug langsung di halaman (supaya kelihatan di HP tanpa perlu
+// devtools/USB debugging) - selain tetap dicatat juga ke console.
+function catatLog(pesan) {
+    console.log(pesan);
+    const el = document.getElementById('debugLog');
+    if (!el) return;
+    const waktu = new Date().toLocaleTimeString('id-ID');
+    el.textContent = `[${waktu}] ${pesan}\n` + el.textContent;
+    // batasi jumlah baris supaya tidak kepanjangan
+    const baris = el.textContent.split('\n');
+    if (baris.length > 15) el.textContent = baris.slice(0, 15).join('\n');
+}
+
+// Satu AudioContext dipakai berulang (bukan bikin baru tiap notif) - supaya statusnya
+// konsisten "boleh autoplay" seperti saat pertama kali di-resume lewat klik tombol.
+let audioCtx = null;
+function dapatkanAudioContext() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        catatLog('AudioContext dibuat, state: ' + audioCtx.state);
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume()
+            .then(() => catatLog('AudioContext resume OK, state: ' + audioCtx.state))
+            .catch(e => catatLog('Resume AudioContext gagal: ' + e));
+    }
+    return audioCtx;
+}
+
 // Pulihkan status "Suara Aktif" supaya tidak hilang tiap kali halaman auto-refresh
 if (localStorage.getItem('suaraAktif') === '1') {
     suaraAktif = true;
     document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+    // Halaman ini auto-refresh tiap 30 detik (location.reload()), jadi wake lock & context
+    // perlu diminta ulang tiap kali halaman baru dimuat, bukan cuma sekali waktu klik pertama.
+    mintaWakeLock();
+}
+
+// Screen Wake Lock: minta browser supaya layar TIDAK mati otomatis selagi dashboard ini
+// dibuka. Ini penting karena begitu layar mati / tab masuk background, Android sering
+// menangguhkan AudioContext & memperlambat timer JS demi hemat baterai - akibatnya suara
+// pengumuman bisa gagal keluar meskipun secara kode semuanya benar.
+let wakeLock = null;
+async function mintaWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('Wake lock aktif: layar tidak akan mati otomatis.');
+        } else {
+            console.warn('Wake Lock API tidak didukung browser ini.');
+        }
+    } catch (e) {
+        console.error('Gagal minta wake lock:', e);
+    }
 }
 
 document.getElementById('aktifkanSuara').addEventListener('click', () => {
     suaraAktif = true;
     localStorage.setItem('suaraAktif', '1');
     document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+    // Inisialisasi/resume AudioContext di dalam klik ini juga (gesture asli dari user),
+    // supaya browser HP paling yakin mengizinkan autoplay untuk sesi ini.
+    dapatkanAudioContext();
+    mintaWakeLock();
 });
+
+// Kalau tab sempat masuk background (misal HP di-lock sebentar) lalu aktif lagi,
+// wake lock otomatis terlepas oleh sistem - minta ulang, dan pastikan AudioContext
+// ikut di-resume (jaga-jaga kalau sempat ke-suspend browser).
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (suaraAktif) {
+            mintaWakeLock();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(e => console.error('Resume AudioContext (visibility) gagal:', e));
+            }
+        }
+    }
+});
+
+// Putar file MP3 pengumuman (Groq/gTTS) lewat Web Audio API juga (bukan elemen <audio>),
+// supaya jalurnya sama persis dengan beep yang sudah terbukti bisa autoplay di HP.
+async function mainkanSuaraPengumuman(url) {
+    catatLog('Mulai putar pengumuman: ' + url);
+    try {
+        const ctx = dapatkanAudioContext();
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Gagal ambil file audio: HTTP ' + res.status);
+        catatLog('File audio berhasil di-fetch (' + res.status + ')');
+        const arrayBuffer = await res.arrayBuffer();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        catatLog('Audio berhasil di-decode, durasi ' + audioBuffer.duration.toFixed(1) + 's');
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        source.start();
+        catatLog('✅ Suara pengumuman diputar (Web Audio)');
+    } catch (e) {
+        catatLog('❌ Gagal Web Audio: ' + e);
+        // Fallback terakhir: coba cara lama pakai elemen <audio> biasa
+        try {
+            const player = document.getElementById('audioPlayer');
+            player.src = url;
+            await player.play();
+            catatLog('✅ Suara pengumuman diputar (fallback <audio>)');
+        } catch (e2) {
+            catatLog('❌ Fallback <audio> juga gagal: ' + e2);
+        }
+    }
+}
 
 // Bunyi alarm (beep) pendek yang dibangkitkan langsung di browser (Web Audio API),
 // tidak perlu file suara terpisah. Diputar SEBELUM suara pengumuman Groq/gTTS,
 // supaya operator sadar dulu ada notifikasi baru masuk sebelum kalimatnya terdengar.
 function mainkanBunyiAlarm(callback) {
     try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = dapatkanAudioContext();
         const jumlahBeep = 3;
         const durasiBeep = 0.15;   // detik
         const jedaBeep = 0.15;     // detik antar beep
@@ -213,11 +314,12 @@ function mainkanBunyiAlarm(callback) {
 
         const totalDurasiMs = jumlahBeep * (durasiBeep + jedaBeep) * 1000;
         setTimeout(() => {
-            ctx.close();
+            // Catatan: ctx TIDAK ditutup di sini karena AudioContext ini dipakai bersama
+            // (persistent) untuk beep berikutnya & suara pengumuman - lihat dapatkanAudioContext().
             if (callback) callback();
         }, totalDurasiMs + 150); // +150ms jeda kecil sebelum suara pengumuman mulai
     } catch (e) {
-        console.error('Alarm beep error:', e);
+        catatLog('❌ Alarm beep error: ' + e);
         if (callback) callback(); // gagal bunyi alarm -> tetap lanjut putar pengumuman
     }
 }
@@ -239,14 +341,13 @@ async function cekPengumuman() {
 
         if (data.id && data.id !== lastAnnouncementId) {
             lastAnnouncementId = data.id;
+            catatLog('🔔 Notifikasi baru terdeteksi: ' + data.id + ' (suaraAktif=' + suaraAktif + ')');
             document.getElementById('pengumumanText').textContent = data.text;
 
             if (suaraAktif) {
                 // Alarm beep dulu, baru setelah selesai putar suara pengumuman dari Groq/gTTS
                 mainkanBunyiAlarm(() => {
-                    const player = document.getElementById('audioPlayer');
-                    player.src = data.audio_url;
-                    player.play();
+                    mainkanSuaraPengumuman(data.audio_url);
                 });
             }
         }
