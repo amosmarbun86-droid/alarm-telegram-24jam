@@ -813,3 +813,24 @@ def cek_alarm():
 
         except Exception as e:
             print("ALARM ERROR:", e)
+
+# ========================
+# MAIN LOOP
+# Web dashboard sudah jalan di thread terpisah (Thread(target=run_web).start()
+# di atas). Thread utama di sini yang bertanggung jawab mengecek command
+# Telegram & alarm jadwal terus-menerus selama proses hidup.
+# ========================
+if __name__ == "__main__":
+    print("✅ Bot alarm & command loop dimulai.")
+    while True:
+        try:
+            cek_command()
+        except Exception as e:
+            print("MAIN LOOP (command) ERROR:", e)
+
+        try:
+            cek_alarm()
+        except Exception as e:
+            print("MAIN LOOP (alarm) ERROR:", e)
+
+        time.sleep(5)
