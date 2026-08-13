@@ -1,36 +1,135 @@
-<html>
+
+<!DOCTYPE html>
+<html lang="id">
 <head>
-<title>Dashboard Route Alarm</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard Jadwal Route</title>
 
-<script id="new-schedule-data">
-window.NEW_SCHEDULE_DATA = [{"No": 1, "Route": "Siborong - Borong DC > Barumun Hub - Lubuk Barumun Hub - Barumun Selatan Hub", "Slot": 2, "Start Loading": "23:40", "ETD Origin": "00:20", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 2, "Route": "Siborong - Borong DC > Pahae Julu Hub - Padang Bolak Hub - Sosa 2 Hub", "Slot": 2, "Start Loading": "23:47", "ETD Origin": "00:27", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 3, "Route": "Siborong - Borong DC > Ulu Barumun Hub - Sosa Hub - Huta Raja Tinggi Hub", "Slot": 2, "Start Loading": "00:36", "ETD Origin": "01:16", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 4, "Route": "Siborong - Borong DC > Tampahan Hub - Balige Hub - Habinsaran Hub", "Slot": 2, "Start Loading": "00:50", "ETD Origin": "01:30", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 5, "Route": "Siborong - Borong DC > Sipirok Hub - Padang Sidempuan Hub - Padang Sidempuan Tenggara Hub - Angkola Selatan Hub", "Slot": 2, "Start Loading": "01:20", "ETD Origin": "02:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 6, "Route": "Siborong - Borong DC > Pandan Hub - Sibabangun Hub - Muara Batang Toru Hub", "Slot": 3, "Start Loading": "01:55", "ETD Origin": "02:35", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 7, "Route": "Siborong - Borong DC > Tapian Nauli Hub - Sorkam Hub - Pinang Sori Hub", "Slot": 2, "Start Loading": "02:28", "ETD Origin": "03:08", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 8, "Route": "Siborong - Borong DC > Angkola Barat Hub - Padang Sidempuan Selatan Hub - Padang Sidempuan Batunadua Hub", "Slot": 2, "Start Loading": "03:25", "ETD Origin": "04:05", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 9, "Route": "Siborong - Borong DC > Pahae Jae Hub - Sayur Matinggi Hub - Siabu Hub", "Slot": 2, "Start Loading": "03:50", "ETD Origin": "04:30", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 10, "Route": "Siborong - Borong DC > Barus Hub - Sirandorung Hub", "Slot": 2, "Start Loading": "03:54", "ETD Origin": "04:34", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 11, "Route": "Siborong - Borong DC > Sipirok Hub - Padang Sidempuan Hub - Padang Sidempuan Tenggara Hub - Angkola Selatan Hub", "Slot": 3, "Start Loading": "03:54", "ETD Origin": "04:34", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 12, "Route": "Siborong - Borong DC > Siborong - Borong Hub - Lintong Nihuta Hub - Palipi Hub", "Slot": 2, "Start Loading": "04:20", "ETD Origin": "05:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 13, "Route": "Siborong - Borong DC > Pangururan Hub - Simanindo Hub", "Slot": 2, "Start Loading": "06:38", "ETD Origin": "07:18", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 14, "Route": "Siborong - Borong DC > Laguboti Hub - Siantar Narumonda Hub - Porsea Hub - Lumban Julu Hub", "Slot": 2, "Start Loading": "06:41", "ETD Origin": "07:21", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 15, "Route": "Siborong - Borong DC > Sipoholon Hub - Tarutung Hub - Adian Koting Hub", "Slot": 2, "Start Loading": "08:20", "ETD Origin": "09:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 16, "Route": "Siborong - Borong DC > Dolok Sanggul Hub - Pollung Hub", "Slot": 2, "Start Loading": "08:54", "ETD Origin": "09:34", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 17, "Route": "Siborong - Borong DC > Batahan Hub - Natal Hub - Muara Batang Gadis Hub", "Slot": 1, "Start Loading": "11:20", "ETD Origin": "12:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 18, "Route": "Siborong - Borong DC > Batang Natal Hub - Ranto Baek Baik Hub - Sinunukan Hub", "Slot": 1, "Start Loading": "13:20", "ETD Origin": "14:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 19, "Route": "Siborong - Borong DC > Saipar Dolok Hub - Panyabungan Hub - Muara Sipongi Hub", "Slot": 1, "Start Loading": "13:54", "ETD Origin": "14:34", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 20, "Route": "Siborong - Borong DC > Tampahan Hub - Balige Hub - Habinsaran Hub", "Slot": 1, "Start Loading": "17:40", "ETD Origin": "18:20", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 21, "Route": "Siborong - Borong DC > Pangururan Hub - Simanindo Hub", "Slot": 1, "Start Loading": "18:15", "ETD Origin": "18:55", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 22, "Route": "Siborong - Borong DC > Barumun Tengah Hub - Huristak Hub - Simangambat Hub", "Slot": 1, "Start Loading": "18:20", "ETD Origin": "19:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 23, "Route": "Siborong - Borong DC > Batahan Hub - Natal Hub - Muara Batang Gadis Hub", "Slot": 2, "Start Loading": "18:20", "ETD Origin": "19:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 24, "Route": "Siborong - Borong DC > Pahae Julu Hub - Padang Bolak Hub - Sosa 2 Hub", "Slot": 1, "Start Loading": "18:20", "ETD Origin": "19:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 25, "Route": "Siborong - Borong DC > Pandan Hub - Sibabangun Hub - Muara Batang Toru Hub", "Slot": 1, "Start Loading": "18:20", "ETD Origin": "19:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 26, "Route": "Siborong - Borong DC > Ulu Barumun Hub - Sosa Hub - Huta Raja Tinggi Hub", "Slot": 1, "Start Loading": "18:20", "ETD Origin": "19:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 27, "Route": "Siborong - Borong DC > Barumun Hub - Lubuk Barumun Hub - Barumun Selatan Hub", "Slot": 1, "Start Loading": "18:20", "ETD Origin": "19:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 28, "Route": "Siborong - Borong DC > Sipirok Hub - Padang Sidempuan Hub - Padang Sidempuan Tenggara Hub - Angkola Selatan Hub", "Slot": 1, "Start Loading": "19:05", "ETD Origin": "19:45", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 29, "Route": "Siborong - Borong DC > Parlilitan Hub - Pakkat Hub - Pasaribu Tobing Hub", "Slot": 1, "Start Loading": "19:20", "ETD Origin": "20:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 30, "Route": "Siborong - Borong DC > Saipar Dolok Hub - Panyabungan Hub - Muara Sipongi Hub", "Slot": 2, "Start Loading": "19:20", "ETD Origin": "20:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 31, "Route": "Siborong - Borong DC > Tapian Nauli Hub - Sorkam Hub - Pinang Sori Hub", "Slot": 1, "Start Loading": "19:20", "ETD Origin": "20:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 32, "Route": "Siborong - Borong DC > Sipoholon Hub - Tarutung Hub - Adian Koting Hub", "Slot": 1, "Start Loading": "19:45", "ETD Origin": "20:25", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 33, "Route": "Siborong - Borong DC > Pahae Jae Hub - Sayur Matinggi Hub - Siabu Hub", "Slot": 1, "Start Loading": "19:50", "ETD Origin": "20:30", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 34, "Route": "Siborong - Borong DC > Angkola Barat Hub - Padang Sidempuan Selatan Hub - Padang Sidempuan Batunadua Hub", "Slot": 1, "Start Loading": "20:10", "ETD Origin": "20:50", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 35, "Route": "Siborong - Borong DC > Laguboti Hub - Siantar Narumonda Hub - Porsea Hub - Lumban Julu Hub", "Slot": 1, "Start Loading": "20:41", "ETD Origin": "21:21", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 36, "Route": "Siborong - Borong DC > Batang Natal Hub - Ranto Baek Baik Hub - Sinunukan Hub", "Slot": 2, "Start Loading": "20:54", "ETD Origin": "21:34", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 37, "Route": "Siborong - Borong DC > Batang Toru Hub - Batang Toru 3 Hub", "Slot": 1, "Start Loading": "21:01", "ETD Origin": "21:41", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 38, "Route": "Siborong - Borong DC > Barus Hub - Sirandorung Hub", "Slot": 1, "Start Loading": "21:20", "ETD Origin": "22:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 39, "Route": "Siborong - Borong DC > Sipahutar Hub - Pangaribuan Hub - Garoga Hub", "Slot": 1, "Start Loading": "21:20", "ETD Origin": "22:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 40, "Route": "Siborong - Borong DC > Angkola Timur Hub - Halongonan Hub", "Slot": 1, "Start Loading": "21:20", "ETD Origin": "22:00", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 41, "Route": "Siborong - Borong DC > Saipar Dolok Hub - Panyabungan Hub - Muara Sipongi Hub", "Slot": 1, "Start Loading": "21:50", "ETD Origin": "22:30", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 42, "Route": "Siborong - Borong DC > Pandan Hub - Sibabangun Hub - Muara Batang Toru Hub", "Slot": 3, "Start Loading": "22:26", "ETD Origin": "23:05", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 43, "Route": "Siborong - Borong DC > Siborong - Borong Hub - Lintong Nihuta Hub - Palipi Hub", "Slot": 2, "Start Loading": "22:40", "ETD Origin": "23:20", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}, {"No": 44, "Route": "Siborong - Borong DC > Dolok Sanggul Hub - Pollung Hub", "Slot": 1, "Start Loading": "23:05", "ETD Origin": "23:45", "Schedule Active Day": "Mon,Tue,Wed,Thu,Fri,Sat,Sun"}];
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1C1C1E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Alarm 24 Jam">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+
+<style>
+body { font-family: sans-serif; background:#f4f4f4; margin:0; padding:12px; }
+table { border-collapse: collapse; width:100%; background:white; }
+th, td { padding:6px 8px; font-size:14px; }
+</style>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/service-worker.js');
+  });
+}
 </script>
-
 </head>
-
 <body>
 
-<h2>Dashboard Jadwal</h2>
+<h2>Dashboard Jadwal Route</h2>
 
-<table border="1">
+<button id="aktifkanSuara" style="padding:8px 16px; margin-bottom:10px;">🔊 Aktifkan Suara Pengumuman</button>
+<div id="pengumumanText" style="margin-bottom:10px; font-weight:bold; color:#2E7D32;"></div>
+<audio id="audioPlayer"></audio>
 
-<tr>
-<th>Route</th>
-<th>Start</th>
-<th>Selesai</th>
-</tr>
+{% if not firebase_ready %}
+<p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
+{% endif %}
 
-{% for r in data %}
+<div id="tabelWrap">
+{{ tabel_html|safe }}
+</div>
 
-<tr>
-<td>{{r["Route"]}}</td>
-<td>{{r["Start Loading"]}}</td>
-<td>{{r["Selesai loading"]}}</td>
-</tr>
+<script>
+let lastAnnouncementId = null;
+let suaraAktif = false;
+let sudahInit = false;
 
-{% endfor %}
+// Pulihkan status "Suara Aktif" supaya tidak hilang tiap kali tabel di-refresh
+if (localStorage.getItem('suaraAktif') === '1') {
+    suaraAktif = true;
+    document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+}
 
-</table>
+document.getElementById('aktifkanSuara').addEventListener('click', () => {
+    suaraAktif = true;
+    localStorage.setItem('suaraAktif', '1');
+    document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+
+    // "Buka kunci" elemen audio supaya browser mengizinkan play() otomatis nanti
+    // (banyak browser mobile blokir audio yang diputar lewat proses background,
+    // walau tombol sudah diklik sebelumnya)
+    const player = document.getElementById('audioPlayer');
+    player.muted = true;
+    player.play().then(() => {
+        player.pause();
+        player.muted = false;
+    }).catch(() => {
+        player.muted = false;
+    });
+});
+
+async function cekPengumuman() {
+    try {
+        const res = await fetch('/api/latest-announcement');
+        const data = await res.json();
+
+        if (!sudahInit) {
+            // Baseline pertama kali load - jangan auto-play data LAMA yang sudah ada
+            lastAnnouncementId = data.id;
+            sudahInit = true;
+            if (data.id) {
+                document.getElementById('pengumumanText').textContent = data.text;
+            }
+            return;
+        }
+
+        if (data.id && data.id !== lastAnnouncementId) {
+            lastAnnouncementId = data.id;
+            document.getElementById('pengumumanText').textContent = data.text;
+
+            if (suaraAktif) {
+                const player = document.getElementById('audioPlayer');
+                // Putar suara alarm dulu, begitu selesai baru lanjut suara pengumuman (TTS)
+                player.src = '/static/audio/alarm.wav';
+                player.onended = () => {
+                    player.onended = null;
+                    player.src = data.audio_url;
+                    player.play();
+                };
+                player.play();
+            }
+        }
+    } catch (e) {
+        console.error('Polling error:', e);
+    }
+}
+
+// Update ISI TABEL saja lewat AJAX (BUKAN reload halaman penuh) - supaya izin
+// autoplay suara dari browser tidak hilang/direset tiap kali tabel diperbarui.
+async function refreshTabel() {
+    const tagAktif = document.activeElement.tagName;
+    if (tagAktif === 'INPUT' || tagAktif === 'TEXTAREA') {
+        return; // lagi ngetik di form, jangan diganggu
+    }
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const res = await fetch('/partial-table' + (params.toString() ? '?' + params.toString() : ''));
+        const html = await res.text();
+        document.getElementById('tabelWrap').innerHTML = html;
+    } catch (e) {
+        console.error('Refresh tabel error:', e);
+    }
+}
+
+setInterval(cekPengumuman, 5000);
+setInterval(refreshTabel, 30000);
+</script>
 
 </body>
 </html>
