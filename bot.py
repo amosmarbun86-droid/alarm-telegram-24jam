@@ -185,6 +185,43 @@ document.getElementById('aktifkanSuara').addEventListener('click', () => {
     document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
 });
 
+// Bunyi alarm (beep) pendek yang dibangkitkan langsung di browser (Web Audio API),
+// tidak perlu file suara terpisah. Diputar SEBELUM suara pengumuman Groq/gTTS,
+// supaya operator sadar dulu ada notifikasi baru masuk sebelum kalimatnya terdengar.
+function mainkanBunyiAlarm(callback) {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const jumlahBeep = 3;
+        const durasiBeep = 0.15;   // detik
+        const jedaBeep = 0.15;     // detik antar beep
+
+        for (let i = 0; i < jumlahBeep; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 1000; // nada beep, Hz
+
+            const mulai = ctx.currentTime + i * (durasiBeep + jedaBeep);
+            gain.gain.setValueAtTime(0.3, mulai);
+            gain.gain.exponentialRampToValueAtTime(0.001, mulai + durasiBeep);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(mulai);
+            osc.stop(mulai + durasiBeep);
+        }
+
+        const totalDurasiMs = jumlahBeep * (durasiBeep + jedaBeep) * 1000;
+        setTimeout(() => {
+            ctx.close();
+            if (callback) callback();
+        }, totalDurasiMs + 150); // +150ms jeda kecil sebelum suara pengumuman mulai
+    } catch (e) {
+        console.error('Alarm beep error:', e);
+        if (callback) callback(); // gagal bunyi alarm -> tetap lanjut putar pengumuman
+    }
+}
+
 async function cekPengumuman() {
     try {
         const res = await fetch('/api/latest-announcement');
@@ -205,9 +242,12 @@ async function cekPengumuman() {
             document.getElementById('pengumumanText').textContent = data.text;
 
             if (suaraAktif) {
-                const player = document.getElementById('audioPlayer');
-                player.src = data.audio_url;
-                player.play();
+                // Alarm beep dulu, baru setelah selesai putar suara pengumuman dari Groq/gTTS
+                mainkanBunyiAlarm(() => {
+                    const player = document.getElementById('audioPlayer');
+                    player.src = data.audio_url;
+                    player.play();
+                });
             }
         }
     } catch (e) {
