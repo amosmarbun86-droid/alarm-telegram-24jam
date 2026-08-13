@@ -174,6 +174,8 @@ Password:<br>
 let lastAnnouncementId = null;
 let suaraAktif = false;
 let sudahInit = false;
+let audioCtx = null;
+let wakeLock = null;
 
 // Tampilkan pesan debug langsung di halaman (supaya kelihatan di HP tanpa perlu
 // devtools/USB debugging) - selain tetap dicatat juga ke console.
@@ -188,9 +190,14 @@ function catatLog(pesan) {
     if (baris.length > 15) el.textContent = baris.slice(0, 15).join('\n');
 }
 
+// Penangkap error global - kalau ADA bagian script manapun yang error tanpa disengaja,
+// pesannya tetap muncul di kotak debug log (bukan cuma di console yang tidak kelihatan di HP).
+window.onerror = function(msg, url, line, col, error) {
+    catatLog('❌ JS ERROR: ' + msg + ' (baris ' + line + ')');
+};
+
 // Satu AudioContext dipakai berulang (bukan bikin baru tiap notif) - supaya statusnya
 // konsisten "boleh autoplay" seperti saat pertama kali di-resume lewat klik tombol.
-let audioCtx = null;
 function dapatkanAudioContext() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -204,42 +211,58 @@ function dapatkanAudioContext() {
     return audioCtx;
 }
 
-// Pulihkan status "Suara Aktif" supaya tidak hilang tiap kali halaman auto-refresh
-if (localStorage.getItem('suaraAktif') === '1') {
-    suaraAktif = true;
-    document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
-    // Halaman ini auto-refresh tiap 30 detik (location.reload()), jadi wake lock & context
-    // perlu diminta ulang tiap kali halaman baru dimuat, bukan cuma sekali waktu klik pertama.
-    mintaWakeLock();
-}
-
 // Screen Wake Lock: minta browser supaya layar TIDAK mati otomatis selagi dashboard ini
 // dibuka. Ini penting karena begitu layar mati / tab masuk background, Android sering
 // menangguhkan AudioContext & memperlambat timer JS demi hemat baterai - akibatnya suara
 // pengumuman bisa gagal keluar meskipun secara kode semuanya benar.
-let wakeLock = null;
 async function mintaWakeLock() {
     try {
         if ('wakeLock' in navigator) {
             wakeLock = await navigator.wakeLock.request('screen');
-            console.log('Wake lock aktif: layar tidak akan mati otomatis.');
+            catatLog('Wake lock aktif: layar tidak akan mati otomatis.');
         } else {
-            console.warn('Wake Lock API tidak didukung browser ini.');
+            catatLog('⚠️ Wake Lock API tidak didukung browser ini.');
         }
     } catch (e) {
-        console.error('Gagal minta wake lock:', e);
+        catatLog('Gagal minta wake lock: ' + e);
     }
 }
 
-document.getElementById('aktifkanSuara').addEventListener('click', () => {
-    suaraAktif = true;
-    localStorage.setItem('suaraAktif', '1');
-    document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
-    // Inisialisasi/resume AudioContext di dalam klik ini juga (gesture asli dari user),
-    // supaya browser HP paling yakin mengizinkan autoplay untuk sesi ini.
-    dapatkanAudioContext();
-    mintaWakeLock();
-});
+// Pasang tombol "Aktifkan Suara" PALING AWAL & dibungkus try/catch sendiri-sendiri,
+// supaya kalaupun ada bagian LAIN dari script ini yang gagal, tombolnya tetap jalan.
+try {
+    document.getElementById('aktifkanSuara').addEventListener('click', () => {
+        try {
+            suaraAktif = true;
+            try { localStorage.setItem('suaraAktif', '1'); }
+            catch (eStorage) { catatLog('⚠️ localStorage.setItem gagal: ' + eStorage); }
+            document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+            dapatkanAudioContext();
+            mintaWakeLock();
+            catatLog('✅ Tombol Aktifkan Suara ditekan, suaraAktif=true');
+        } catch (eKlik) {
+            catatLog('❌ Error saat memproses klik Aktifkan Suara: ' + eKlik);
+        }
+    });
+    catatLog('Tombol Aktifkan Suara siap.');
+} catch (ePasang) {
+    catatLog('❌ Gagal memasang tombol Aktifkan Suara: ' + ePasang);
+}
+
+// Pulihkan status "Suara Aktif" supaya tidak hilang tiap kali halaman auto-refresh.
+// Dibungkus try/catch supaya kalau localStorage tidak bisa diakses (mode privat/dibatasi),
+// bagian script SETELAH ini (cekPengumuman, dsb) tetap jalan normal.
+try {
+    if (localStorage.getItem('suaraAktif') === '1') {
+        suaraAktif = true;
+        document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
+        // Halaman ini auto-refresh tiap 30 detik (location.reload()), jadi wake lock & context
+        // perlu diminta ulang tiap kali halaman baru dimuat, bukan cuma sekali waktu klik pertama.
+        mintaWakeLock();
+    }
+} catch (e) {
+    catatLog('⚠️ localStorage tidak bisa diakses: ' + e);
+}
 
 // Kalau tab sempat masuk background (misal HP di-lock sebentar) lalu aktif lagi,
 // wake lock otomatis terlepas oleh sistem - minta ulang, dan pastikan AudioContext
@@ -249,11 +272,12 @@ document.addEventListener('visibilitychange', () => {
         if (suaraAktif) {
             mintaWakeLock();
             if (audioCtx && audioCtx.state === 'suspended') {
-                audioCtx.resume().catch(e => console.error('Resume AudioContext (visibility) gagal:', e));
+                audioCtx.resume().catch(e => catatLog('Resume AudioContext (visibility) gagal: ' + e));
             }
         }
     }
 });
+
 
 // Putar file MP3 pengumuman (Groq/gTTS) lewat Web Audio API juga (bukan elemen <audio>),
 // supaya jalurnya sama persis dengan beep yang sudah terbukti bisa autoplay di HP.
