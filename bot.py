@@ -514,6 +514,11 @@ self.addEventListener('fetch', function(event) {
 """
     return Response(js, mimetype="application/javascript")
 
+@app.route("/api/latest-announcement")
+def api_latest_announcement():
+    from flask import jsonify
+    return jsonify(latest_announcement)
+    
 @app.route("/", methods=["GET","POST"])
 def dashboard():
     firebase_ready = bool(FIREBASE_DB_URL)
