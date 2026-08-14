@@ -197,7 +197,9 @@ TABEL_HTML = """
 <td>{{r[2]}}</td>
 <td>{{r[3]}}</td>
 <td>
-{% if status_list[loop.index0] == "proses" %}
+{% if status_list[loop.index0] == "freeload" %}
+<b style="color:#1976D2;">🔵 Proses Freeload</b>
+{% elif status_list[loop.index0] == "proses" %}
 <b style="color:orange;">🟡 Sedang Proses</b>
 {% elif status_list[loop.index0] == "selesai" %}
 <b style="color:green;">✅ Selesai</b>
@@ -487,8 +489,19 @@ def hitung_warna_baris(rows):
 
 def hitung_status_list(rows):
     """rows: list [route, slot, start, selesai]. Kembalikan list string per baris:
-    'proses', 'selesai', atau '' (belum mulai/menunggu)."""
+    'freeload' (H-30 menit s.d. sebelum start), 'proses', 'selesai', atau '' (belum mulai/menunggu)."""
     now = datetime.now(ZoneInfo("Asia/Jakarta")).time()
+    now_min = now.hour * 60 + now.minute
+
+    def _menit(t):
+        return t.hour * 60 + t.minute
+
+    def _dalam_rentang(x, a, b):
+        """Cek apakah x ada di rentang [a, b) secara siklik (mendukung lewat tengah malam)."""
+        if a <= b:
+            return a <= x < b
+        return x >= a or x < b
+
     hasil = []
     for r in rows:
         try:
@@ -498,15 +511,21 @@ def hitung_status_list(rows):
             hasil.append("")
             continue
 
-        if start_t <= selesai_t:
-            if now < start_t:
+        start_min = _menit(start_t)
+        selesai_min = _menit(selesai_t)
+        freeload_min = (start_min - 30) % 1440
+
+        if _dalam_rentang(now_min, freeload_min, start_min):
+            status = "freeload"
+        elif start_t <= selesai_t:
+            if now_min < start_min:
                 status = ""
-            elif now <= selesai_t:
+            elif now_min <= selesai_min:
                 status = "proses"
             else:
                 status = "selesai"
         else:
-            if now >= start_t or now <= selesai_t:
+            if now_min >= start_min or now_min <= selesai_min:
                 status = "proses"
             else:
                 status = "selesai"
@@ -853,7 +872,6 @@ def cek_alarm():
                 key_30 = ("REMINDER_FREELOAD", jenis, route, waktu, now_dt.date())
 
                 if selisih_30 <= 30 and key_30 not in sent_today:
-                    kirim(f"📦 H-30 MENIT FREELOAD\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
                     buat_pengumuman("REMINDER_FREELOAD", route, slot, waktu)
                     sent_today.add(key_30)
 
