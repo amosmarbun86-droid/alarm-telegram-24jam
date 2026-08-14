@@ -3,6 +3,7 @@ import uuid
 import wave
 import struct
 import math
+import itertools
 from groq import Groq
 from gtts import gTTS
 
@@ -12,7 +13,23 @@ groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 AUDIO_FOLDER = "static/audio"
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
 
-latest_announcement = {"id": None, "text": None, "audio_url": None}
+# Antrian pengumuman: setiap pengumuman baru DITAMBAHKAN ke list ini (bukan
+# menimpa satu variabel saja) supaya kalau ada beberapa rute dengan jam yang
+# sama persis (mis. 7 jadwal sama-sama START jam 18:20), semua pengumuman
+# tetap tersimpan urut dan bisa diputar satu-satu oleh dashboard, tidak ada
+# yang ketiban/ke-skip.
+_id_counter = itertools.count(1)
+announcement_queue = []
+MAX_QUEUE = 100  # batas aman, biar list tidak membengkak tanpa henti
+
+
+def _tambah_ke_queue(text, audio_url):
+    item = {"id": next(_id_counter), "text": text, "audio_url": audio_url}
+    announcement_queue.append(item)
+    # buang entri paling lama kalau sudah kelewat banyak
+    if len(announcement_queue) > MAX_QUEUE:
+        del announcement_queue[: len(announcement_queue) - MAX_QUEUE]
+
 
 ALARM_SOUND_PATH = os.path.join(AUDIO_FOLDER, "alarm.wav")
 ALARM_SOUND_URL = "/static/audio/alarm.wav"
@@ -63,7 +80,7 @@ JENIS_DESKRIPSI = {
 
 def buat_pengumuman(jenis, route, slot, waktu):
     """Generate teks pengumuman via Groq, lalu convert ke audio (gTTS).
-    Update dict latest_announcement supaya dashboard bisa polling & auto-play."""
+    Tambahkan hasilnya ke antrian (announcement_queue) supaya dashboard bisa polling & auto-play."""
     if not groq_client:
         print("⚠️  GROQ_API_KEY belum diset, pengumuman suara dilewati.")
         return
@@ -91,9 +108,8 @@ def buat_pengumuman(jenis, route, slot, waktu):
         tts = gTTS(text=teks, lang='id')
         tts.save(filepath)
 
-        latest_announcement["id"] = audio_id
-        latest_announcement["text"] = teks
-        latest_announcement["audio_url"] = f"/static/audio/{filename}"
+        audio_url = f"/static/audio/{filename}"
+        _tambah_ke_queue(teks, audio_url)
 
         print(f"🔊 Pengumuman dibuat: {teks}")
 
