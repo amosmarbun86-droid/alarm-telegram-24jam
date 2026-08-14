@@ -847,6 +847,16 @@ def cek_alarm():
                 sent_today.add(key)
 
             if jenis == "START":
+                # Reminder 30 menit sebelum mulai loading (freeload)
+                reminder30_time = jam_alarm - timedelta(minutes=30)
+                selisih_30 = abs((now_dt - reminder30_time).total_seconds())
+                key_30 = ("REMINDER_FREELOAD", jenis, route, waktu, now_dt.date())
+
+                if selisih_30 <= 30 and key_30 not in sent_today:
+                    kirim(f"📦 H-30 MENIT FREELOAD\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
+                    buat_pengumuman("REMINDER_FREELOAD", route, slot, waktu)
+                    sent_today.add(key_30)
+
                 # Reminder 10 menit sebelum mulai loading
                 reminder_time = jam_alarm - timedelta(minutes=10)
                 selisih_r = abs((now_dt - reminder_time).total_seconds())
