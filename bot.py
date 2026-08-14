@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request, redirect, render_template_string, Response
 from threading import Thread
-from announcer import buat_pengumuman, latest_announcement, ALARM_SOUND_URL
+from announcer import buat_pengumuman, announcement_queue, ALARM_SOUND_URL
 
 # ========================
 # CONFIG
@@ -113,38 +113,58 @@ document.getElementById('aktifkanSuara').addEventListener('click', () => {
 
 async function cekPengumuman() {
     try {
-        const res = await fetch('/api/latest-announcement');
+        const res = await fetch('/api/announcements?since=' + (lastAnnouncementId || 0));
         const data = await res.json();
+
+        if (!data.length) return;
 
         if (!sudahInit) {
             // Baseline pertama kali load - jangan auto-play data LAMA yang sudah ada
-            lastAnnouncementId = data.id;
+            lastAnnouncementId = data[data.length - 1].id;
             sudahInit = true;
-            if (data.id) {
-                document.getElementById('pengumumanText').textContent = data.text;
-            }
+            document.getElementById('pengumumanText').textContent = data[data.length - 1].text;
             return;
         }
 
-        if (data.id && data.id !== lastAnnouncementId) {
-            lastAnnouncementId = data.id;
-            document.getElementById('pengumumanText').textContent = data.text;
+        lastAnnouncementId = data[data.length - 1].id;
 
-            if (suaraAktif) {
-                const player = document.getElementById('audioPlayer');
-                // Putar suara alarm dulu, begitu selesai baru lanjut suara pengumuman (TTS)
-                player.src = '/static/audio/alarm.wav';
-                player.onended = () => {
-                    player.onended = null;
-                    player.src = data.audio_url;
-                    player.play();
-                };
-                player.play();
-            }
+        if (suaraAktif) {
+            // Masukkan semua pengumuman baru ke antrian (bukan cuma yang terakhir)
+            // supaya kalau ada beberapa rute dengan jam yang sama persis, semua
+            // tetap keputer satu-satu, tidak ada yang ke-skip.
+            antrianSuara.push(...data);
+            putarAntrianBerikutnya();
+        } else {
+            document.getElementById('pengumumanText').textContent = data[data.length - 1].text;
         }
     } catch (e) {
         console.error('Polling error:', e);
     }
+}
+
+let antrianSuara = [];
+let sedangMemutar = false;
+
+function putarAntrianBerikutnya() {
+    if (sedangMemutar || antrianSuara.length === 0) return;
+    sedangMemutar = true;
+
+    const item = antrianSuara.shift();
+    document.getElementById('pengumumanText').textContent = item.text;
+
+    const player = document.getElementById('audioPlayer');
+    // Putar suara alarm dulu, begitu selesai baru lanjut suara pengumuman (TTS)
+    player.src = '/static/audio/alarm.wav';
+    player.onended = () => {
+        player.src = item.audio_url;
+        player.onended = () => {
+            player.onended = null;
+            sedangMemutar = false;
+            putarAntrianBerikutnya(); // lanjut ke pengumuman berikutnya kalau masih ada
+        };
+        player.play();
+    };
+    player.play();
 }
 
 // Update ISI TABEL saja lewat AJAX (BUKAN reload halaman penuh) - supaya izin
@@ -582,10 +602,18 @@ self.addEventListener('fetch', function(event) {
 """
     return Response(js, mimetype="application/javascript")
 
-@app.route("/api/latest-announcement")
-def api_latest_announcement():
+@app.route("/api/announcements")
+def api_announcements():
+    """Kembalikan semua pengumuman dengan id > 'since' (urut).
+    Dipakai dashboard supaya tidak ada pengumuman yang ke-skip walau
+    beberapa rute punya jam yang sama persis."""
     from flask import jsonify
-    return jsonify(latest_announcement)
+    try:
+        since = int(request.args.get("since", 0))
+    except (TypeError, ValueError):
+        since = 0
+    hasil = [a for a in announcement_queue if a["id"] > since]
+    return jsonify(hasil)
     
 def render_tabel(rows):
     """Render isi tabel dashboard agar bisa dipakai oleh halaman utama dan AJAX."""
