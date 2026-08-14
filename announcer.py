@@ -53,9 +53,10 @@ _generate_alarm_sound()
 # Deskripsi situasi per jenis alarm - dipakai untuk menyusun prompt ke Groq
 JENIS_DESKRIPSI = {
     "START": "mobil akan mulai loading barang sekarang",
-    "SELESAI": "loading barang sudah selesai sekarang",
+    "SELESAI": "loading barang sudah selesai sekarang dan mobil akan segera berangkat",
     "REMINDER": "pengingat, waktu loading tinggal 10 menit lagi",
-    "REMINDER_SELESAI": "pengingat, loading akan selesai dalam 15 menit lagi",
+    "REMINDER_FREELOAD": "pengingat, 30 menit lagi mulai loading dan silakan lakukan freeload sebelumnya",
+    "REMINDER_SELESAI": "pengingat, loading akan selesai 10 menit lagi",
     "SANDAR": "mobil untuk rute tujuan ini sudah sandar/tiba di lokasi",
 }
 
