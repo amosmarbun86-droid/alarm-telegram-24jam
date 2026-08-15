@@ -4,11 +4,18 @@ import wave
 import struct
 import math
 import itertools
+import asyncio
+import edge_tts
 from groq import Groq
-from gtts import gTTS
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+# Suara TTS pakai edge-tts (mesin neural voice Microsoft Edge, gratis tanpa API
+# key, hasil jauh lebih natural dibanding gTTS). Voice Indonesia yang dipakai:
+# id-ID-ArdiNeural (pria). Kalau mau ganti, tinggal ubah nilai ini, contoh
+# alternatif suara wanita: "id-ID-GadisNeural".
+TTS_VOICE = "id-ID-ArdiNeural"
 
 AUDIO_FOLDER = "static/audio"
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
@@ -78,8 +85,18 @@ JENIS_DESKRIPSI = {
 }
 
 
+def _text_to_speech(teks, filepath, voice=TTS_VOICE):
+    """Generate audio dari teks pakai edge-tts (neural voice, natural).
+    edge-tts async by design, jadi dijalankan lewat asyncio.run() supaya
+    bisa dipanggil biasa dari kode yang sinkron (Flask/loop utama bot.py)."""
+    async def _run():
+        communicate = edge_tts.Communicate(teks, voice)
+        await communicate.save(filepath)
+    asyncio.run(_run())
+
+
 def buat_pengumuman(jenis, route, slot, waktu):
-    """Generate teks pengumuman via Groq, lalu convert ke audio (gTTS).
+    """Generate teks pengumuman via Groq, lalu convert ke audio (edge-tts).
     Tambahkan hasilnya ke antrian (announcement_queue) supaya dashboard bisa polling & auto-play."""
     if not groq_client:
         print("⚠️  GROQ_API_KEY belum diset, pengumuman suara dilewati.")
@@ -105,8 +122,7 @@ def buat_pengumuman(jenis, route, slot, waktu):
         filename = f"{audio_id}.mp3"
         filepath = os.path.join(AUDIO_FOLDER, filename)
 
-        tts = gTTS(text=teks, lang='id')
-        tts.save(filepath)
+        _text_to_speech(teks, filepath)
 
         audio_url = f"/static/audio/{filename}"
         _tambah_ke_queue(teks, audio_url)
