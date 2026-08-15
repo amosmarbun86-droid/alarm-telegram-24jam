@@ -1,4 +1,4 @@
-# alarm-telegram-24jam
+#Alarm Dashboard 24 Jam
 
 Sistem alarm & dashboard jadwal loading/keberangkatan mobil logistik, berjalan 24 jam. Dibangun dengan Python (Flask) + Firebase Realtime Database, dengan notifikasi Telegram dan pengumuman suara otomatis (Groq AI + Text-to-Speech).
 
