@@ -74,14 +74,38 @@ def _generate_alarm_sound():
 
 _generate_alarm_sound()
 
-# Deskripsi situasi per jenis alarm - dipakai untuk menyusun prompt ke Groq
-JENIS_DESKRIPSI = {
-    "START": "mobil akan mulai loading barang sekarang",
-    "SELESAI": "loading barang sudah selesai sekarang dan mobil akan segera berangkat",
-    "REMINDER": "pengingat, waktu loading tinggal 10 menit lagi",
-    "REMINDER_FREELOAD": "pengingat, 30 menit lagi mulai loading dan silakan lakukan freeload sebelumnya",
-    "REMINDER_SELESAI": "pengingat, loading akan selesai 10 menit lagi",
-    "SANDAR": "mobil untuk rute tujuan ini sudah sandar/tiba di lokasi",
+# Deskripsi & catatan per jenis alarm - dipakai untuk menyusun prompt ke Groq.
+# "catatan" penting supaya AI tidak salah pakai kata "keberangkatan/berangkat"
+# untuk jam MULAI LOADING (yang benar cuma untuk jam SELESAI loading, karena
+# mobil baru benar-benar berangkat setelah loading selesai, bukan saat mulai).
+JENIS_INFO = {
+    "START": {
+        "deskripsi": "mobil akan mulai loading barang sekarang",
+        "catatan": "Jam yang disebutkan adalah jam MULAI LOADING, BUKAN jam keberangkatan/berangkat. "
+                   "Jangan gunakan kata 'keberangkatan' atau 'berangkat' untuk jam ini, cukup sebut 'mulai loading' atau 'proses loading dimulai'.",
+    },
+    "SELESAI": {
+        "deskripsi": "loading barang sudah selesai sekarang dan mobil akan segera berangkat",
+        "catatan": "Jam yang disebutkan adalah jam loading SELESAI sekaligus jam mobil akan berangkat, boleh gunakan kata 'berangkat'/'keberangkatan'.",
+    },
+    "REMINDER": {
+        "deskripsi": "pengingat, waktu loading tinggal 10 menit lagi",
+        "catatan": "Jam yang disebutkan adalah jam MULAI LOADING, BUKAN jam keberangkatan. "
+                   "Jangan gunakan kata 'keberangkatan'/'berangkat', cukup sebut 'mulai loading'.",
+    },
+    "REMINDER_FREELOAD": {
+        "deskripsi": "pengingat, 30 menit lagi mulai loading dan silakan lakukan freeload sebelumnya",
+        "catatan": "Jam yang disebutkan adalah jam MULAI LOADING (30 menit lagi), BUKAN jam keberangkatan. "
+                   "Jangan gunakan kata 'keberangkatan'/'berangkat', cukup sebut 'mulai loading'.",
+    },
+    "REMINDER_SELESAI": {
+        "deskripsi": "pengingat, loading akan selesai 10 menit lagi",
+        "catatan": "Jam yang disebutkan adalah jam loading akan SELESAI (mobil akan segera berangkat setelahnya), boleh gunakan kata 'berangkat'/'keberangkatan'.",
+    },
+    "SANDAR": {
+        "deskripsi": "mobil untuk rute tujuan ini sudah sandar/tiba di lokasi",
+        "catatan": "",
+    },
 }
 
 
@@ -104,11 +128,15 @@ def buat_pengumuman(jenis, route, slot, waktu):
 
     try:
         slot_text = f" slot {slot}," if slot else ""
-        deskripsi = JENIS_DESKRIPSI.get(jenis, jenis)
+        info = JENIS_INFO.get(jenis, {"deskripsi": jenis, "catatan": ""})
+        deskripsi = info["deskripsi"]
+        catatan = info["catatan"]
+        catatan_text = f" {catatan}" if catatan else ""
         prompt = (
             f"Buatkan satu kalimat pengumuman singkat dan formal untuk sistem alarm "
             f"logistik pengiriman barang menggunakan mobil/truk. Situasi: {deskripsi}. "
-            f"Rute: {route},{slot_text} jam {waktu} WIB. Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
+            f"Rute: {route},{slot_text} jam {waktu} WIB.{catatan_text} "
+            f"Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
         )
 
         response = groq_client.chat.completions.create(
