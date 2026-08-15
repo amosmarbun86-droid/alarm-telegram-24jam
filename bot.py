@@ -53,9 +53,24 @@ HTML = """
 <link rel="apple-touch-icon" href="/icon-192.png">
 
 <style>
-body { font-family: sans-serif; background:#f4f4f4; margin:0; padding:12px; }
+body { font-family: sans-serif; background:#f4f4f4; margin:0; padding:12px; transition: background 0.2s, color 0.2s; }
 table { border-collapse: collapse; width:100%; background:white; }
 th, td { padding:6px 8px; font-size:14px; }
+
+/* ===== Mode Gelap ===== */
+body.dark { background:#121212; color:#e8e8e8; }
+body.dark h2, body.dark h3 { color:#e8e8e8; }
+body.dark p { color:#ccc; }
+body.dark a { color:#8ab4f8; }
+body.dark input, body.dark select {
+  background:#2a2a2a; color:#eee; border:1px solid #555;
+}
+body.dark button {
+  background:#333; color:#fff; border:1px solid #555;
+}
+/* Tabel tetap terang biar warna per-rute (grouping rute) masih jelas
+   dibedakan, cuma diredupkan sedikit biar tidak nyilaukan mata di malam hari */
+body.dark table { filter: brightness(0.82) contrast(1.05); }
 </style>
 
 <script>
@@ -71,12 +86,24 @@ if ('serviceWorker' in navigator) {
 <h2>Dashboard Jadwal Route</h2>
 
 <button id="aktifkanSuara" style="padding:8px 16px; margin-bottom:10px;">🔊 Aktifkan Suara Pengumuman</button>
+<button id="toggleDark" style="padding:8px 16px; margin-bottom:10px; margin-left:8px;">🌙 Mode Gelap</button>
 <div id="pengumumanText" style="margin-bottom:10px; font-weight:bold; color:#2E7D32;"></div>
 <audio id="audioPlayer"></audio>
 
 {% if not firebase_ready %}
 <p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
 {% endif %}
+
+<div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
+<input type="text" id="filterRute" placeholder="🔍 Cari nama rute..." style="flex:1; min-width:150px; padding:8px; box-sizing:border-box;">
+<select id="filterStatus" style="padding:8px;">
+<option value="">Semua Status</option>
+<option value="freeload">🔵 Proses Freeload</option>
+<option value="proses">🟡 Sedang Proses</option>
+<option value="selesai">✅ Selesai</option>
+<option value="none">⚪ Belum Mulai</option>
+</select>
+</div>
 
 <div id="tabelWrap">
 {{ tabel_html|safe }}
@@ -92,6 +119,31 @@ if (localStorage.getItem('suaraAktif') === '1') {
     suaraAktif = true;
     document.getElementById('aktifkanSuara').textContent = '✅ Suara Aktif';
 }
+
+// Pulihkan status Mode Gelap
+if (localStorage.getItem('darkMode') === '1') {
+    document.body.classList.add('dark');
+    document.getElementById('toggleDark').textContent = '☀️ Mode Terang';
+}
+document.getElementById('toggleDark').addEventListener('click', () => {
+    document.body.classList.toggle('dark');
+    const isDark = document.body.classList.contains('dark');
+    localStorage.setItem('darkMode', isDark ? '1' : '0');
+    document.getElementById('toggleDark').textContent = isDark ? '☀️ Mode Terang' : '🌙 Mode Gelap';
+});
+
+// Filter/search tabel berdasarkan nama rute & status
+function terapkanFilter() {
+    const kataKunci = (document.getElementById('filterRute').value || '').toLowerCase().trim();
+    const statusFilter = document.getElementById('filterStatus').value || '';
+    document.querySelectorAll('#tabelWrap tr[data-route]').forEach(tr => {
+        const cocokRute = !kataKunci || tr.dataset.route.includes(kataKunci);
+        const cocokStatus = !statusFilter || tr.dataset.status === statusFilter;
+        tr.style.display = (cocokRute && cocokStatus) ? '' : 'none';
+    });
+}
+document.getElementById('filterRute').addEventListener('input', terapkanFilter);
+document.getElementById('filterStatus').addEventListener('change', terapkanFilter);
 
 document.getElementById('aktifkanSuara').addEventListener('click', () => {
     suaraAktif = true;
@@ -179,6 +231,7 @@ async function refreshTabel() {
         const res = await fetch('/partial-table' + (params.toString() ? '?' + params.toString() : ''));
         const html = await res.text();
         document.getElementById('tabelWrap').innerHTML = html;
+        terapkanFilter(); // filter yang sedang aktif tetap diterapkan ke data baru
     } catch (e) {
         console.error('Refresh tabel error:', e);
     }
@@ -205,7 +258,7 @@ TABEL_HTML = """
 </tr>
 
 {% for key, r in rows %}
-<tr style="background-color: {{ warna_baris[loop.index0] }};">
+<tr data-route="{{ r[0]|lower }}" data-status="{{ status_list[loop.index0] or 'none' }}" style="background-color: {{ warna_baris[loop.index0] }};">
 <td>
 {% if maps_links[loop.index0] %}
 <a href="{{ maps_links[loop.index0] }}" target="_blank" rel="noopener" style="color:#0645AD;">{{r[0]}}</a>
