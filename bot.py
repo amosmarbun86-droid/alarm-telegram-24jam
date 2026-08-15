@@ -69,8 +69,12 @@ body.dark button {
   background:#333; color:#fff; border:1px solid #555;
 }
 /* Tabel tetap terang biar warna per-rute (grouping rute) masih jelas
-   dibedakan, cuma diredupkan sedikit biar tidak nyilaukan mata di malam hari */
+   dibedakan, cuma diredupkan sedikit biar tidak nyilaukan mata di malam hari.
+   Teks di dalam tabel DIPAKSA gelap lagi (override warna teks body yang putih),
+   supaya tidak jadi putih-di-atas-terang alias tidak kebaca. */
 body.dark table { filter: brightness(0.82) contrast(1.05); }
+body.dark th, body.dark td { color:#111; }
+body.dark th { background:#ddd; }
 </style>
 
 <script>
