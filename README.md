@@ -1,4 +1,4 @@
-#Alarm Dashboard 24 Jam
+# Alarm Dashboard 24 Jam
 
 Sistem alarm & dashboard jadwal loading/keberangkatan mobil logistik, berjalan 24 jam. Dibangun dengan Python (Flask) + Firebase Realtime Database, dengan notifikasi Telegram dan pengumuman suara otomatis (Groq AI + Text-to-Speech).
 
@@ -37,7 +37,7 @@ Sistem alarm & dashboard jadwal loading/keberangkatan mobil logistik, berjalan 2
 ## Struktur Project
 
 ```
-alarm-telegram-24jam/
+alarm-dashboard-24jam/
 ├── bot.py              # Entry point utama: Flask dashboard + alarm loop + command Telegram
 ├── announcer.py         # Modul Groq (generate teks) + edge-tts (convert ke suara) + alarm bip + antrian suara
 ├── requirements.txt      # Dependencies Python
