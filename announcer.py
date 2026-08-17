@@ -11,6 +11,13 @@ from groq import Groq
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
+# Model Groq yang dipakai untuk generate teks pengumuman.
+# CATATAN: "llama-3.3-70b-versatile" sudah DIHAPUS/decommission oleh Groq
+# (balikin error 404), makanya diganti ke "openai/gpt-oss-120b".
+# Kalau suatu saat model ini juga dihapus/error lagi, cek daftar model aktif di:
+# https://console.groq.com/settings/limits
+GROQ_MODEL = "openai/gpt-oss-120b"
+
 # Suara TTS pakai edge-tts (mesin neural voice Microsoft Edge, gratis tanpa API
 # key, hasil jauh lebih natural dibanding gTTS). Voice Indonesia yang dipakai:
 # id-ID-ArdiNeural (pria). Kalau mau ganti, tinggal ubah nilai ini, contoh
@@ -119,33 +126,53 @@ def _text_to_speech(teks, filepath, voice=TTS_VOICE):
     asyncio.run(_run())
 
 
+def _teks_fallback(jenis, route, slot, waktu):
+    """Teks cadangan dipakai kalau Groq gagal/error, supaya alarm suara TETAP
+    bunyi walau AI-nya lagi bermasalah (limit habis, model dihapus, dsb)."""
+    slot_text = f" slot {slot}," if slot else ""
+    info = JENIS_INFO.get(jenis, {"deskripsi": jenis})
+    return f"Perhatian, {info['deskripsi']}. Rute {route},{slot_text} jam {waktu} WIB."
+
+
 def buat_pengumuman(jenis, route, slot, waktu):
     """Generate teks pengumuman via Groq, lalu convert ke audio (edge-tts).
-    Tambahkan hasilnya ke antrian (announcement_queue) supaya dashboard bisa polling & auto-play."""
+    Tambahkan hasilnya ke antrian (announcement_queue) supaya dashboard bisa polling & auto-play.
+
+    Kalau Groq error/limit/model dihapus, tetap lanjut pakai teks fallback
+    supaya alarm suara TIDAK BISU/tidak diam, dan errornya dicetak jelas ke log."""
+    teks = None
+
     if not groq_client:
-        print("⚠️  GROQ_API_KEY belum diset, pengumuman suara dilewati.")
-        return
+        print("⚠️  GROQ_API_KEY belum diset, pakai teks fallback (tanpa AI).")
+        teks = _teks_fallback(jenis, route, slot, waktu)
+    else:
+        try:
+            slot_text = f" slot {slot}," if slot else ""
+            info = JENIS_INFO.get(jenis, {"deskripsi": jenis, "catatan": ""})
+            deskripsi = info["deskripsi"]
+            catatan = info["catatan"]
+            catatan_text = f" {catatan}" if catatan else ""
+            prompt = (
+                f"Buatkan satu kalimat pengumuman singkat dan formal untuk sistem alarm "
+                f"logistik pengiriman barang menggunakan mobil/truk. Situasi: {deskripsi}. "
+                f"Rute: {route},{slot_text} jam {waktu} WIB.{catatan_text} "
+                f"Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
+            )
+
+            response = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=100
+            )
+            teks = response.choices[0].message.content.strip()
+
+        except Exception as e:
+            # Cetak jelas: jenis error + model yang dipakai, biar gampang didiagnosa
+            # dari log (misalnya kalau modelnya suatu saat dihapus lagi oleh Groq).
+            print(f"❌ GROQ ERROR (model={GROQ_MODEL}):", repr(e))
+            teks = _teks_fallback(jenis, route, slot, waktu)
 
     try:
-        slot_text = f" slot {slot}," if slot else ""
-        info = JENIS_INFO.get(jenis, {"deskripsi": jenis, "catatan": ""})
-        deskripsi = info["deskripsi"]
-        catatan = info["catatan"]
-        catatan_text = f" {catatan}" if catatan else ""
-        prompt = (
-            f"Buatkan satu kalimat pengumuman singkat dan formal untuk sistem alarm "
-            f"logistik pengiriman barang menggunakan mobil/truk. Situasi: {deskripsi}. "
-            f"Rute: {route},{slot_text} jam {waktu} WIB.{catatan_text} "
-            f"Bahasa Indonesia, tanpa tanda kutip, langsung kalimatnya saja."
-        )
-
-        response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=100
-        )
-        teks = response.choices[0].message.content.strip()
-
         audio_id = str(uuid.uuid4())
         filename = f"{audio_id}.mp3"
         filepath = os.path.join(AUDIO_FOLDER, filename)
@@ -158,4 +185,4 @@ def buat_pengumuman(jenis, route, slot, waktu):
         print(f"🔊 Pengumuman dibuat: {teks}")
 
     except Exception as e:
-        print("PENGUMUMAN ERROR:", e)
+        print("❌ TTS/QUEUE ERROR:", repr(e))
