@@ -130,6 +130,21 @@ def _text_to_speech(teks, filepath, voice=TTS_VOICE):
     asyncio.run(_run())
 
 
+import re
+
+def _bersihkan_reasoning(teks):
+    """Sebagian model Groq (termasuk qwen) adalah 'reasoning model' yang
+    kadang menyertakan proses berpikirnya dalam blok <think>...</think>
+    sebelum jawaban akhir. Buang blok itu, sisakan cuma jawaban aslinya."""
+    if not teks:
+        return teks
+    # buang blok <think>...</think> (bisa multi-baris)
+    bersih = re.sub(r"<think>.*?</think>", "", teks, flags=re.DOTALL)
+    # jaga-jaga kalau tag penutup </think> ada tapi tag pembuka ketinggalan/lain format
+    bersih = re.sub(r"^.*?</think>", "", bersih, flags=re.DOTALL)
+    return bersih.strip()
+
+
 def _teks_fallback(jenis, route, slot, waktu):
     """Teks cadangan dipakai kalau Groq gagal/error, supaya alarm suara TETAP
     bunyi walau AI-nya lagi bermasalah (limit habis, model dihapus, dsb)."""
@@ -168,7 +183,8 @@ def buat_pengumuman(jenis, route, slot, waktu):
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200
             )
-            teks = (response.choices[0].message.content or "").strip()
+            teks_mentah = (response.choices[0].message.content or "").strip()
+            teks = _bersihkan_reasoning(teks_mentah)
 
             # Kalau ternyata masih kosong (model berubah lagi / balikin format
             # aneh), langsung pakai fallback daripada bikin file audio bisu.
