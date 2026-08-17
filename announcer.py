@@ -12,11 +12,15 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 # Model Groq yang dipakai untuk generate teks pengumuman.
-# CATATAN: "llama-3.3-70b-versatile" sudah DIHAPUS/decommission oleh Groq
-# (balikin error 404), makanya diganti ke "openai/gpt-oss-120b".
+# CATATAN RIWAYAT:
+# - "llama-3.3-70b-versatile" sudah DIHAPUS/decommission oleh Groq (404).
+# - "openai/gpt-oss-120b" sempat dicoba, TAPI ini model "reasoning" yang
+#   mikir dulu secara internal sebelum menjawab, sehingga dengan max_tokens
+#   kecil (100), token habis untuk "mikir" dan jawaban akhirnya jadi teks
+#   KOSONG. Makanya diganti ke qwen (bukan reasoning model, langsung jawab).
 # Kalau suatu saat model ini juga dihapus/error lagi, cek daftar model aktif di:
 # https://console.groq.com/settings/limits
-GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_MODEL = "qwen/qwen3.6-27b"
 
 # Suara TTS pakai edge-tts (mesin neural voice Microsoft Edge, gratis tanpa API
 # key, hasil jauh lebih natural dibanding gTTS). Voice Indonesia yang dipakai:
@@ -162,9 +166,15 @@ def buat_pengumuman(jenis, route, slot, waktu):
             response = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=100
+                max_tokens=200
             )
-            teks = response.choices[0].message.content.strip()
+            teks = (response.choices[0].message.content or "").strip()
+
+            # Kalau ternyata masih kosong (model berubah lagi / balikin format
+            # aneh), langsung pakai fallback daripada bikin file audio bisu.
+            if not teks:
+                print(f"⚠️  Groq balikin teks kosong (model={GROQ_MODEL}), pakai fallback.")
+                teks = _teks_fallback(jenis, route, slot, waktu)
 
         except Exception as e:
             # Cetak jelas: jenis error + model yang dipakai, biar gampang didiagnosa
