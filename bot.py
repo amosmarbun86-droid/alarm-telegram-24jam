@@ -15,6 +15,11 @@ from announcer import buat_pengumuman, announcement_queue, ALARM_SOUND_URL
 # ========================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+# Fitur Telegram (kirim notifikasi & command bot) otomatis MATI kalau salah satu
+# env var ini kosong. Dashboard web, alarm suara (bip + pengumuman TTS), dan
+# Firebase TETAP jalan normal walau Telegram dimatikan. Untuk menyalakan lagi,
+# tinggal isi ulang BOT_TOKEN & CHAT_ID di Render, tidak perlu ubah kode apa pun.
+TELEGRAM_ENABLED = bool(BOT_TOKEN and CHAT_ID)
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
 FIREBASE_DB_URL = os.getenv("FIREBASE_DB_URL", "").rstrip("/")
 FIREBASE_SECRET = os.getenv("FIREBASE_SECRET", "")
@@ -832,6 +837,8 @@ def menu():
 # SEND TELEGRAM
 # ========================
 def kirim(text, keyboard=None):
+    if not TELEGRAM_ENABLED:
+        return
     try:
         payload = {
             "chat_id": CHAT_ID,
@@ -883,13 +890,16 @@ def baca_data_alarm():
 def cek_command():
     global last_update
 
+    if not TELEGRAM_ENABLED:
+        return
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
     params = {"timeout": 1}
     if last_update:
         params["offset"] = last_update + 1
 
     try:
-        r = requests.get(url, params=params).json()
+        r = requests.get(url, params=params, timeout=15).json()
         if not r.get("ok"):
             return
 
@@ -1006,6 +1016,8 @@ def cek_alarm():
 # MAIN LOOP
 # ========================
 print("🚀 BOT ROUTE ALARM AKTIF", datetime.now())
+if not TELEGRAM_ENABLED:
+    print("ℹ️  Telegram DIMATIKAN (BOT_TOKEN/CHAT_ID kosong). Dashboard & alarm suara tetap aktif.")
 
 while True:
     try:
