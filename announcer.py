@@ -5,6 +5,7 @@ import struct
 import math
 import itertools
 import asyncio
+import time
 import edge_tts
 from groq import Groq
 
@@ -122,14 +123,29 @@ JENIS_INFO = {
 }
 
 
-def _text_to_speech(teks, filepath, voice=TTS_VOICE):
+def _text_to_speech(teks, filepath, voice=TTS_VOICE, percobaan_maks=3):
     """Generate audio dari teks pakai edge-tts (neural voice, natural).
     edge-tts async by design, jadi dijalankan lewat asyncio.run() supaya
-    bisa dipanggil biasa dari kode yang sinkron (Flask/loop utama bot.py)."""
+    bisa dipanggil biasa dari kode yang sinkron (Flask/loop utama bot.py).
+
+    Otomatis dicoba ulang (retry) kalau gagal, karena kadang server edge-tts
+    gagal konek sesaat - terutama kalau ada 2+ pengumuman ke-trigger nyaris
+    bersamaan (misalnya beberapa rute dengan jam START yang sama persis)."""
     async def _run():
         communicate = edge_tts.Communicate(teks, voice)
         await communicate.save(filepath)
-    asyncio.run(_run())
+
+    error_terakhir = None
+    for percobaan in range(1, percobaan_maks + 1):
+        try:
+            asyncio.run(_run())
+            return
+        except Exception as e:
+            error_terakhir = e
+            print(f"⚠️  edge-tts gagal (percobaan {percobaan}/{percobaan_maks}): {repr(e)}")
+            if percobaan < percobaan_maks:
+                time.sleep(1.5)  # jeda sebentar sebelum coba lagi
+    raise error_terakhir
 
 
 import re
@@ -226,4 +242,5 @@ def buat_pengumuman(jenis, route, slot, waktu):
         print(f"🔊 Pengumuman dibuat: {teks}")
 
     except Exception as e:
-        print("❌ TTS/QUEUE ERROR:", repr(e))
+        print(f"❌ TTS/QUEUE ERROR [{jenis} | {route} | slot {slot} | jam {waktu}]: {repr(e)}")
+        print(f"   -> Pengumuman untuk kejadian ini GAGAL dibuat setelah beberapa kali percobaan.")
