@@ -26,13 +26,17 @@ Sistem alarm & dashboard jadwal loading/keberangkatan mobil logistik, berjalan 2
 - Reminder H-30 menit (freeload) **sengaja tidak dikirim ke Telegram** — cuma suara di dashboard, karena Telegram tidak dipakai untuk komunikasi kerja sehari-hari
 
 **Pengumuman Suara Otomatis (Groq + edge-tts)**
-- Teks pengumuman dibuat otomatis oleh Groq AI (model `llama-3.3-70b-versatile`) sesuai konteks (START, SELESAI, reminder, freeload, atau status Sandar)
+- Teks pengumuman dibuat otomatis oleh Groq AI (model `openai/gpt-oss-20b`) sesuai konteks (START, SELESAI, reminder, freeload, atau status Sandar)
 - Prompt ke AI sudah diberi instruksi tegas soal istilah waktu, supaya tidak salah sebut "keberangkatan" untuk jam mulai loading (kata "keberangkatan"/"berangkat" cuma dipakai untuk jam SELESAI, karena mobil baru benar-benar berangkat setelah loading kelar)
+- Prompt & system message mewajibkan output Bahasa Indonesia (mencegah model kadang jawab pakai Bahasa Inggris), dan reasoning-token (`<think>...</think>`) dari model otomatis dibersihkan sebelum jadi suara
+- **Fallback otomatis** — kalau Groq error/limit habis/model di-decommission, sistem tetap pakai teks cadangan sederhana supaya alarm suara tetap bunyi (tidak bisu), errornya dicetak jelas ke log Render buat didiagnosa
 - Diubah jadi suara Bahasa Indonesia via **edge-tts** (neural voice Microsoft Edge, gratis tanpa API key, jauh lebih natural dibanding gTTS) — voice default: `id-ID-ArdiNeural` (pria)
 - Suara alarm (bip nada tinggi) diputar dulu sebelum pengumuman suara menyusul
 - **Sistem antrian suara** — semua pengumuman ditampung di antrian (bukan cuma yang terakhir), lalu diputar satu-satu berurutan. Ini penting kalau ada beberapa rute dengan jam START/SELESAI yang sama persis (misalnya 7 jadwal bareng), supaya tidak ada pengumuman yang ke-skip
 - Dashboard polling tiap 5 detik untuk mendeteksi pengumuman baru dan memutar suara otomatis di device yang membuka dashboard (harus klik "Aktifkan Suara" sekali per sesi/device)
 - Trigger otomatis juga saat operator menandai "Sudah Sandar" secara manual di dashboard
+
+> ⚠️ Groq beberapa kali men-decommission model tanpa pemberitahuan panjang (pernah terjadi pada `llama-3.3-70b-versatile`). Kalau pengumuman suara tiba-tiba berhenti/error terus di log Render dengan pesan `GROQ ERROR`, cek daftar model aktif di [console.groq.com/settings/limits](https://console.groq.com/settings/limits) dan update nilai `GROQ_MODEL` di `announcer.py`.
 
 ## Struktur Project
 
