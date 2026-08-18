@@ -75,6 +75,21 @@ body.dark button {
 body.dark table { filter: brightness(0.82) contrast(1.05); }
 body.dark th, body.dark td { color:#111; }
 body.dark th { background:#ddd; }
+
+/* ===== Titik berdenyut untuk status "Sedang Proses" & "Proses Freeload" ===== */
+.dot-pulsing {
+  display:inline-block;
+  width:9px; height:9px;
+  border-radius:50%;
+  margin-right:5px;
+  vertical-align:middle;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%   { opacity: 1;    transform: scale(1); }
+  50%  { opacity: 0.3;  transform: scale(0.75); }
+  100% { opacity: 1;    transform: scale(1); }
+}
 </style>
 
 <script>
@@ -278,9 +293,9 @@ TABEL_HTML = """
 <td>{{r[3]}}</td>
 <td>
 {% if status_list[loop.index0] == "freeload" %}
-<b style="color:#1976D2;">🔵 Proses Freeload</b>
+<b style="color:#1976D2;"><span class="dot-pulsing" style="background:#1976D2;"></span>Proses Freeload</b>
 {% elif status_list[loop.index0] == "proses" %}
-<b style="color:orange;">🟡 Sedang Proses</b>
+<b style="color:orange;"><span class="dot-pulsing" style="background:orange;"></span>Sedang Proses</b>
 {% elif status_list[loop.index0] == "selesai" %}
 <b style="color:green;">✅ Selesai</b>
 {% endif %}
