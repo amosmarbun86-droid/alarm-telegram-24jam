@@ -12,15 +12,17 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 # Model Groq yang dipakai untuk generate teks pengumuman.
-# CATATAN RIWAYAT:
-# - "llama-3.3-70b-versatile" sudah DIHAPUS/decommission oleh Groq (404).
-# - "openai/gpt-oss-120b" sempat dicoba, TAPI ini model "reasoning" yang
-#   mikir dulu secara internal sebelum menjawab, sehingga dengan max_tokens
-#   kecil (100), token habis untuk "mikir" dan jawaban akhirnya jadi teks
-#   KOSONG. Makanya diganti ke qwen (bukan reasoning model, langsung jawab).
+# CATATAN RIWAYAT (biar nggak bolak-balik coba yang sama):
+# - "llama-3.3-70b-versatile" -> DIHAPUS/decommission oleh Groq (404).
+# - "openai/gpt-oss-120b"     -> reasoning model, dgn max_tokens kecil jawaban
+#                                 kepotong jadi teks kosong.
+# - "qwen/qwen3.6-27b"        -> jawaban akhir sering nyelip Bahasa Inggris,
+#                                 kurang konsisten ikut instruksi Bahasa Indonesia.
+# -> Dipakai sekarang: "openai/gpt-oss-20b" (versi lebih kecil, reasoning-nya
+#    lebih ringkas jadi lebih nurut instruksi bahasa & max_tokens cukup).
 # Kalau suatu saat model ini juga dihapus/error lagi, cek daftar model aktif di:
 # https://console.groq.com/settings/limits
-GROQ_MODEL = "qwen/qwen3.6-27b"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 # Suara TTS pakai edge-tts (mesin neural voice Microsoft Edge, gratis tanpa API
 # key, hasil jauh lebih natural dibanding gTTS). Voice Indonesia yang dipakai:
@@ -172,6 +174,7 @@ def buat_pengumuman(jenis, route, slot, waktu):
             catatan = info["catatan"]
             catatan_text = f" {catatan}" if catatan else ""
             prompt = (
+                f"WAJIB Bahasa Indonesia, DILARANG Bahasa Inggris. "
                 f"Buatkan satu kalimat pengumuman singkat dan formal untuk sistem alarm "
                 f"logistik pengiriman barang menggunakan mobil/truk. Situasi: {deskripsi}. "
                 f"Rute: {route},{slot_text} jam {waktu} WIB.{catatan_text} "
@@ -180,7 +183,19 @@ def buat_pengumuman(jenis, route, slot, waktu):
 
             response = groq_client.chat.completions.create(
                 model=GROQ_MODEL,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Kamu adalah asisten yang HANYA boleh menjawab dalam "
+                            "Bahasa Indonesia. Dilarang keras menggunakan Bahasa "
+                            "Inggris atau bahasa lain sama sekali dalam jawaban akhir. "
+                            "Jawab langsung satu kalimat saja, tanpa penjelasan, "
+                            "tanpa proses berpikir, tanpa tanda kutip."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
                 max_tokens=200
             )
             teks_mentah = (response.choices[0].message.content or "").strip()
