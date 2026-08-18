@@ -87,6 +87,9 @@ if ('serviceWorker' in navigator) {
 </head>
 <body>
 
+<img src="/static/powered-by.svg" alt="Powered by Amos'rcpdroid86"
+     style="position:fixed; top:10px; right:10px; height:28px; z-index:1000;">
+
 <h2>Dashboard Jadwal Route</h2>
 
 <button id="aktifkanSuara" style="padding:8px 16px; margin-bottom:10px;">🔊 Aktifkan Suara Pengumuman</button>
