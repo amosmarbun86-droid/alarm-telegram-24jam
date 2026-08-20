@@ -95,6 +95,72 @@ body.dark th { background:#ddd; }
   50%  { opacity: 0.3;  transform: scale(0.75); }
   100% { opacity: 1;    transform: scale(1); }
 }
+
+/* ===== Personalisasi Dashboard: tombol bertema aksen ===== */
+:root { --aksen: #1976D2; }
+.btn-aksen {
+  background: var(--aksen); color:#fff; border:none;
+  padding:8px 16px; border-radius:6px; cursor:pointer; font-size:14px;
+}
+body.dark .btn-aksen { border:1px solid #555; }
+
+/* ===== Panel Personalisasi ===== */
+#panelPersonalisasi {
+  display:none; background:white; border-radius:8px; padding:14px;
+  margin:10px 0; box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+body.dark #panelPersonalisasi { background:#1e1e1e; }
+#panelPersonalisasi label { display:block; margin:8px 0 4px; font-size:13px; }
+#panelPersonalisasi.terbuka { display:block; }
+
+/* ===== Widget Dashboard ===== */
+.widget-grid {
+  display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;
+}
+.widget-card {
+  background:white; border-radius:10px; padding:12px 14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.15);
+  flex:1 1 200px; min-width:160px; box-sizing:border-box;
+  position:relative; touch-action:pan-y;
+}
+body.dark .widget-card { background:#1e1e1e; color:#eee; }
+.widget-card.dragging {
+  opacity:0.9; transform:scale(1.03);
+  box-shadow:0 6px 16px rgba(0,0,0,.25);
+  z-index:10; position:relative;
+}
+.widget-title {
+  font-size:12px; text-transform:uppercase; letter-spacing:0.03em;
+  color:#888; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center;
+}
+/* Area sentuh gagang drag dibuat minimal 40x40px (standar touch target),
+   bukan cuma ukuran ikonnya - supaya gampang ditekan jempol di HP tanpa meleset. */
+.widget-handle {
+  cursor:grab; user-select:none; touch-action:none;
+  font-size:18px; opacity:0.5;
+  width:40px; height:40px;
+  display:flex; align-items:center; justify-content:center;
+  margin:-8px -8px -8px 0; /* perluas area sentuh tanpa mengubah tata letak judul */
+  border-radius:8px;
+}
+.widget-handle:active { cursor:grabbing; opacity:1; background:rgba(0,0,0,.06); }
+body.dark .widget-handle:active { background:rgba(255,255,255,.1); }
+#widget-ringkasan .ringkasan-row { display:flex; gap:14px; font-size:14px; }
+#widget-ringkasan .ringkasan-item b { font-size:20px; display:block; }
+#widget-jam #jamDigital { font-size:26px; font-weight:bold; font-variant-numeric: tabular-nums; }
+#widget-jam #tanggalDigital { font-size:12px; color:#888; }
+#widget-catatan textarea {
+  width:100%; box-sizing:border-box; min-height:70px; resize:vertical;
+  border:1px solid #ccc; border-radius:6px; padding:6px; font-family:inherit; font-size:13px;
+}
+body.dark #widget-catatan textarea { background:#2a2a2a; color:#eee; border:1px solid #555; }
+
+/* Layar sempit (HP): widget ditumpuk 1 kolom vertikal - pola reorder atas-bawah
+   yang familiar (mirip app Notes/Reminders), bukan sejajar berdesakan. */
+@media (max-width: 480px) {
+  .widget-grid { flex-direction: column; }
+  .widget-card { flex: 1 1 100%; }
+}
 </style>
 
 <script>
@@ -112,10 +178,44 @@ if ('serviceWorker' in navigator) {
 
 <h2>Dashboard Jadwal Route</h2>
 
-<button id="aktifkanSuara" style="padding:8px 16px; margin-bottom:10px;">🔊 Aktifkan Suara Pengumuman</button>
-<button id="toggleDark" style="padding:8px 16px; margin-bottom:10px; margin-left:8px;">🌙 Mode Gelap</button>
+<button id="aktifkanSuara" class="btn-aksen" style="margin-bottom:10px;">🔊 Aktifkan Suara Pengumuman</button>
+<button id="toggleDark" class="btn-aksen" style="margin-bottom:10px; margin-left:8px;">🌙 Mode Gelap</button>
+<button id="togglePersonalisasi" class="btn-aksen" style="margin-bottom:10px; margin-left:8px;">🎨 Personalisasi</button>
 <div id="pengumumanText" style="margin-bottom:10px; font-weight:bold; color:#2E7D32;"></div>
 <audio id="audioPlayer"></audio>
+
+<div id="panelPersonalisasi">
+  <label for="inputAksen">Warna Aksen (tombol/highlight)</label>
+  <input type="color" id="inputAksen" value="#1976D2">
+  <label for="inputBackground">Warna Background Dashboard</label>
+  <input type="color" id="inputBackground" value="#f4f4f4">
+  <div style="margin-top:12px;">
+    <button id="resetTema" class="btn-aksen">↺ Reset ke Default</button>
+  </div>
+  <p style="font-size:12px; color:#888; margin-top:10px;">
+    Pengaturan warna & susunan widget tersimpan otomatis di perangkat ini (tidak berlaku di device lain).
+  </p>
+</div>
+
+<div class="widget-grid" id="widgetGrid">
+  <div class="widget-card" data-widget="ringkasan" id="widget-ringkasan">
+    <p class="widget-title">Ringkasan Status <span class="widget-handle">⠿</span></p>
+    <div class="ringkasan-row">
+      <div class="ringkasan-item">🔵 Freeload<b id="ringkasanFreeload">0</b></div>
+      <div class="ringkasan-item">🟡 Proses<b id="ringkasanProses">0</b></div>
+      <div class="ringkasan-item">✅ Selesai<b id="ringkasanSelesai">0</b></div>
+    </div>
+  </div>
+  <div class="widget-card" data-widget="jam" id="widget-jam">
+    <p class="widget-title">Jam Sekarang (WIB) <span class="widget-handle">⠿</span></p>
+    <div id="jamDigital">--:--:--</div>
+    <div id="tanggalDigital"></div>
+  </div>
+  <div class="widget-card" data-widget="catatan" id="widget-catatan">
+    <p class="widget-title">Catatan Bebas <span class="widget-handle">⠿</span></p>
+    <textarea id="catatanBebas" placeholder="Tulis catatan operator di sini..."></textarea>
+  </div>
+</div>
 
 {% if not firebase_ready %}
 <p style="color:red;"><b>FIREBASE_DB_URL belum diset di Environment Variables.</b> Dashboard tidak bisa membaca/menyimpan data.</p>
@@ -259,6 +359,7 @@ async function refreshTabel() {
         const html = await res.text();
         document.getElementById('tabelWrap').innerHTML = html;
         terapkanFilter(); // filter yang sedang aktif tetap diterapkan ke data baru
+        updateRingkasan(); // widget "Ringkasan Status" ikut disegarkan
     } catch (e) {
         console.error('Refresh tabel error:', e);
     }
@@ -266,6 +367,166 @@ async function refreshTabel() {
 
 setInterval(cekPengumuman, 5000);
 setInterval(refreshTabel, 30000);
+
+// ========================================================
+// PERSONALISASI DASHBOARD (tema warna, widget, drag-reorder)
+// Semua disimpan di localStorage - berlaku per perangkat/browser saja.
+// ========================================================
+
+// ----- Widget: Ringkasan Status -----
+// Dihitung dari data-status yang sudah ada di setiap baris tabel (tidak perlu
+// request tambahan ke server), jadi otomatis akurat tiap kali tabel disegarkan.
+function updateRingkasan() {
+    let freeload = 0, proses = 0, selesai = 0;
+    document.querySelectorAll('#tabelWrap tr[data-status]').forEach(tr => {
+        const st = tr.dataset.status;
+        if (st === 'freeload') freeload++;
+        else if (st === 'proses') proses++;
+        else if (st === 'selesai') selesai++;
+    });
+    document.getElementById('ringkasanFreeload').textContent = freeload;
+    document.getElementById('ringkasanProses').textContent = proses;
+    document.getElementById('ringkasanSelesai').textContent = selesai;
+}
+
+// ----- Widget: Jam Digital (WIB) -----
+function updateJamDigital() {
+    const now = new Date();
+    const opsiJam = { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+    const opsiTanggal = { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+    document.getElementById('jamDigital').textContent = now.toLocaleTimeString('id-ID', opsiJam);
+    document.getElementById('tanggalDigital').textContent = now.toLocaleDateString('id-ID', opsiTanggal);
+}
+setInterval(updateJamDigital, 1000);
+
+// ----- Widget: Catatan Bebas -----
+// Autosave ke localStorage tiap kali diketik (debounce ringan supaya tidak nulis
+// ke localStorage di setiap keystroke).
+const catatanEl = document.getElementById('catatanBebas');
+catatanEl.value = localStorage.getItem('catatanBebas') || '';
+let catatanTimer = null;
+catatanEl.addEventListener('input', () => {
+    clearTimeout(catatanTimer);
+    catatanTimer = setTimeout(() => {
+        localStorage.setItem('catatanBebas', catatanEl.value);
+    }, 400);
+});
+
+// ----- Tema: warna aksen & background -----
+const inputAksen = document.getElementById('inputAksen');
+const inputBackground = document.getElementById('inputBackground');
+
+function terapkanTema() {
+    const aksen = localStorage.getItem('temaAksen');
+    const bg = localStorage.getItem('temaBackground');
+    if (aksen) {
+        document.documentElement.style.setProperty('--aksen', aksen);
+        inputAksen.value = aksen;
+    }
+    if (bg) {
+        document.body.style.setProperty('background', bg, 'important');
+        inputBackground.value = bg;
+    }
+}
+inputAksen.addEventListener('input', () => {
+    localStorage.setItem('temaAksen', inputAksen.value);
+    document.documentElement.style.setProperty('--aksen', inputAksen.value);
+});
+inputBackground.addEventListener('input', () => {
+    localStorage.setItem('temaBackground', inputBackground.value);
+    document.body.style.setProperty('background', inputBackground.value, 'important');
+});
+document.getElementById('resetTema').addEventListener('click', () => {
+    localStorage.removeItem('temaAksen');
+    localStorage.removeItem('temaBackground');
+    document.documentElement.style.removeProperty('--aksen');
+    document.body.style.removeProperty('background');
+    inputAksen.value = '#1976D2';
+    inputBackground.value = '#f4f4f4';
+});
+document.getElementById('togglePersonalisasi').addEventListener('click', () => {
+    document.getElementById('panelPersonalisasi').classList.toggle('terbuka');
+});
+
+// ----- Drag & drop reorder widget (Pointer Events - jalan di mouse & sentuhan HP) -----
+// Dipakai lewat "gagang" (ikon ⠿) supaya drag tidak konflik dengan scroll halaman
+// atau ketik di textarea Catatan.
+const widgetGrid = document.getElementById('widgetGrid');
+let widgetDrag = null;
+
+function cariTargetTerdekat(container, x, y) {
+    const kandidat = [...container.querySelectorAll('.widget-card:not(.dragging)')];
+    let terdekat = null, jarakTerdekat = Infinity;
+    kandidat.forEach(el => {
+        const box = el.getBoundingClientRect();
+        const cx = box.left + box.width / 2;
+        const cy = box.top + box.height / 2;
+        const jarak = Math.hypot(x - cx, y - cy);
+        if (jarak < jarakTerdekat) {
+            jarakTerdekat = jarak;
+            terdekat = el;
+        }
+    });
+    return terdekat;
+}
+
+function simpanUrutanWidget() {
+    const urutan = [...widgetGrid.children].map(el => el.dataset.widget);
+    localStorage.setItem('widgetOrder', JSON.stringify(urutan));
+}
+
+function muatUrutanWidget() {
+    const saved = localStorage.getItem('widgetOrder');
+    if (!saved) return;
+    try {
+        const urutan = JSON.parse(saved);
+        urutan.forEach(id => {
+            const el = document.getElementById('widget-' + id);
+            if (el) widgetGrid.appendChild(el);
+        });
+    } catch (e) {
+        console.error('Gagal memuat urutan widget:', e);
+    }
+}
+
+function onWidgetPointerDown(e) {
+    widgetDrag = e.target.closest('.widget-card');
+    if (!widgetDrag) return;
+    widgetDrag.setPointerCapture(e.pointerId);
+    widgetDrag.classList.add('dragging');
+    document.addEventListener('pointermove', onWidgetPointerMove);
+    document.addEventListener('pointerup', onWidgetPointerUp);
+}
+function onWidgetPointerMove(e) {
+    if (!widgetDrag) return;
+    const target = cariTargetTerdekat(widgetGrid, e.clientX, e.clientY);
+    if (target && target !== widgetDrag) {
+        const semua = [...widgetGrid.children];
+        if (semua.indexOf(target) < semua.indexOf(widgetDrag)) {
+            widgetGrid.insertBefore(widgetDrag, target);
+        } else {
+            widgetGrid.insertBefore(widgetDrag, target.nextSibling);
+        }
+    }
+}
+function onWidgetPointerUp(e) {
+    if (!widgetDrag) return;
+    widgetDrag.classList.remove('dragging');
+    try { widgetDrag.releasePointerCapture(e.pointerId); } catch (err) {}
+    document.removeEventListener('pointermove', onWidgetPointerMove);
+    document.removeEventListener('pointerup', onWidgetPointerUp);
+    simpanUrutanWidget();
+    widgetDrag = null;
+}
+document.querySelectorAll('.widget-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', onWidgetPointerDown);
+});
+
+// ----- Inisialisasi personalisasi saat halaman dimuat -----
+muatUrutanWidget();
+terapkanTema();
+updateJamDigital();
+updateRingkasan();
 </script>
 
 </body>
