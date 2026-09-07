@@ -626,6 +626,17 @@ Password:<br>
 &nbsp;<a href="/">Batal</a>
 {% endif %}
 </form>
+
+<h3>Import Jadwal dari CSV</h3>
+<p style="color:#a00;">⚠️ Ini akan MENGHAPUS semua jadwal lama dan menggantinya dengan isi file CSV yang diupload. Status "Sudah Sandar" hari ini juga akan ikut hilang.</p>
+<form method="post" enctype="multipart/form-data" onsubmit="return confirm('Yakin? Semua jadwal lama akan dihapus dan diganti isi file CSV ini.')">
+<input type="hidden" name="action" value="import_csv">
+File CSV (kolom: Rute, Slot, Start Loading, Selesai Loading):<br>
+<input type="file" name="csv_file" accept=".csv"><br>
+Password:<br>
+<input type="password" name="password"><br><br>
+<button type="submit">Import & Ganti Semua Jadwal</button>
+</form>
 """
 
 # ========================
@@ -1019,6 +1030,29 @@ def dashboard():
                     return redirect("/")
                 else:
                     error = "Data tidak ditemukan (mungkin sudah diubah)."
+
+            elif action == "import_csv":
+                file = request.files.get("csv_file")
+                if not file or file.filename == "":
+                    error = "Belum ada file CSV yang dipilih."
+                else:
+                    try:
+                        konten = file.stream.read().decode("utf-8-sig")
+                        reader = csv.reader(konten.splitlines())
+                        next(reader, None)  # lewati header
+                        rows_baru = []
+                        for r in reader:
+                            if len(r) >= 4 and r[0].strip():
+                                rows_baru.append((r[0].strip(), r[1].strip(), r[2].strip(), r[3].strip()))
+                        if not rows_baru:
+                            error = "File CSV kosong atau formatnya tidak sesuai."
+                        else:
+                            fb_delete("jadwal")
+                            for route, slot, start, selesai in rows_baru:
+                                tambah_row(route, slot, start, selesai)
+                            return redirect("/")
+                    except Exception as e:
+                        error = f"Gagal import CSV: {e}"
 
             elif action == "toggle_sandar":
                 key = request.form.get("key", "")
