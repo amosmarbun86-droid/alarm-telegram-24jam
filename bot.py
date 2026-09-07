@@ -996,6 +996,18 @@ def render_tabel(rows):
     """Render isi tabel dashboard agar bisa dipakai oleh halaman utama dan AJAX."""
     just_rows = [v for k, v in rows]
     status_list_hasil = hitung_status_list(just_rows)
+
+    # Ambil konteks edit (kalau ada ?edit=key di URL) supaya form Edit Jadwal
+    # yang ada di dalam TABEL_HTML ikut terisi otomatis, bukan selalu kosong.
+    edit_key = edit_route = edit_slot = edit_start = edit_selesai = None
+    edit_param = request.args.get("edit")
+    if edit_param:
+        for k, v in rows:
+            if k == edit_param:
+                edit_key = k
+                edit_route, edit_slot, edit_start, edit_selesai = v[0], v[1], v[2], v[3]
+                break
+
     return render_template_string(
         TABEL_HTML,
         rows=rows,
@@ -1003,7 +1015,9 @@ def render_tabel(rows):
         warna_baris=hitung_warna_baris(just_rows),
         sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
         maps_links=[buat_link_maps(r[0]) for r in just_rows],
-        voice_options=VOICE_OPTIONS, current_voice=ambil_voice()
+        voice_options=VOICE_OPTIONS, current_voice=ambil_voice(),
+        edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
+        edit_start=edit_start, edit_selesai=edit_selesai
     )
 
 @app.route("/partial-table")
