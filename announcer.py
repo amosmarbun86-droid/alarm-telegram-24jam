@@ -26,10 +26,16 @@ groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 GROQ_MODEL = "openai/gpt-oss-20b"
 
 # Suara TTS pakai edge-tts (mesin neural voice Microsoft Edge, gratis tanpa API
-# key, hasil jauh lebih natural dibanding gTTS). Voice Indonesia yang dipakai:
-# id-ID-ArdiNeural (pria). Kalau mau ganti, tinggal ubah nilai ini, contoh
-# alternatif suara wanita: "id-ID-GadisNeural".
+# key, hasil jauh lebih natural dibanding gTTS). Voice Indonesia yang tersedia
+# cuma 2: id-ID-ArdiNeural (pria) dan id-ID-GadisNeural (wanita).
+# Default dipakai kalau tidak ada pilihan lain dikirim (mis. dari dashboard).
 TTS_VOICE = "id-ID-ArdiNeural"
+
+# Daftar suara yang boleh dipilih dari dashboard (key -> label tampilan).
+VOICE_OPTIONS = {
+    "id-ID-ArdiNeural": "Ardi (Pria)",
+    "id-ID-GadisNeural": "Gadis (Wanita)",
+}
 
 AUDIO_FOLDER = "static/audio"
 os.makedirs(AUDIO_FOLDER, exist_ok=True)
@@ -171,12 +177,16 @@ def _teks_fallback(jenis, route, slot, waktu):
     return f"Perhatian, {info['deskripsi']}. Rute {route},{slot_text} jam {waktu} WIB."
 
 
-def buat_pengumuman(jenis, route, slot, waktu):
+def buat_pengumuman(jenis, route, slot, waktu, voice=None):
     """Generate teks pengumuman via Groq, lalu convert ke audio (edge-tts).
     Tambahkan hasilnya ke antrian (announcement_queue) supaya dashboard bisa polling & auto-play.
 
+    voice: kode suara edge-tts (mis. "id-ID-GadisNeural"). Kalau tidak dikirim
+    (None) atau bukan salah satu dari VOICE_OPTIONS, pakai TTS_VOICE default.
+
     Kalau Groq error/limit/model dihapus, tetap lanjut pakai teks fallback
     supaya alarm suara TIDAK BISU/tidak diam, dan errornya dicetak jelas ke log."""
+    voice_dipakai = voice if voice in VOICE_OPTIONS else TTS_VOICE
     teks = None
 
     if not groq_client:
@@ -234,7 +244,7 @@ def buat_pengumuman(jenis, route, slot, waktu):
         filename = f"{audio_id}.mp3"
         filepath = os.path.join(AUDIO_FOLDER, filename)
 
-        _text_to_speech(teks, filepath)
+        _text_to_speech(teks, filepath, voice=voice_dipakai)
 
         audio_url = f"/static/audio/{filename}"
         _tambah_ke_queue(teks, audio_url)
