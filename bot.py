@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from flask import Flask, request, redirect, render_template_string, Response
 from threading import Thread
-from announcer import buat_pengumuman, announcement_queue, ALARM_SOUND_URL
+from announcer import buat_pengumuman, announcement_queue, ALARM_SOUND_URL, VOICE_OPTIONS, TTS_VOICE
 
 # ========================
 # CONFIG
@@ -627,6 +627,17 @@ Password:<br>
 {% endif %}
 </form>
 
+<h3>Suara Pengumuman</h3>
+<form method="post">
+<input type="hidden" name="action" value="set_voice">
+<select name="voice">
+{% for kode, label in voice_options.items() %}
+<option value="{{ kode }}" {% if kode == current_voice %}selected{% endif %}>{{ label }}</option>
+{% endfor %}
+</select>
+<button type="submit">Simpan Suara</button>
+</form>
+
 <h3>Import Jadwal dari CSV</h3>
 <p style="color:#a00;">⚠️ Ini akan MENGHAPUS semua jadwal lama dan menggantinya dengan isi file CSV yang diupload. Status "Sudah Sandar" hari ini juga akan ikut hilang.</p>
 <form method="post" enctype="multipart/form-data" onsubmit="return confirm('Yakin? Semua jadwal lama akan dihapus dan diganti isi file CSV ini.')">
@@ -768,6 +779,19 @@ def hitung_sandar_list(rows, status_list):
 
 def hapus_row(key):
     return fb_delete(f"jadwal/{key}")
+
+def ambil_voice():
+    """Ambil kode suara TTS yang lagi dipilih dari Firebase (settings/voice).
+    Kalau belum pernah diset atau nilainya tidak valid, pakai default dari announcer.py."""
+    voice = fb_get("settings/voice")
+    if voice in VOICE_OPTIONS:
+        return voice
+    return TTS_VOICE
+
+def set_voice(voice):
+    if voice not in VOICE_OPTIONS:
+        return None
+    return fb_put("settings/voice", voice)
 
 def migrasi_csv_ke_firebase():
     """Migrasi satu kali: kalau data Firebase masih kosong dan file CSV lama
@@ -1054,6 +1078,13 @@ def dashboard():
                     except Exception as e:
                         error = f"Gagal import CSV: {e}"
 
+            elif action == "set_voice":
+                voice_baru = request.form.get("voice", "")
+                if set_voice(voice_baru) is None and voice_baru not in VOICE_OPTIONS:
+                    error = "Pilihan suara tidak valid."
+                else:
+                    return redirect("/")
+
             elif action == "toggle_sandar":
                 key = request.form.get("key", "")
                 status_baru = request.form.get("status", "on")
@@ -1065,7 +1096,7 @@ def dashboard():
                         for k, v in rows:
                             if k == key:
                                 waktu_sandar = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%H:%M")
-                                buat_pengumuman("SANDAR", v[0], v[1], waktu_sandar)
+                                buat_pengumuman("SANDAR", v[0], v[1], waktu_sandar, voice=ambil_voice())
                                 break
                     return redirect("/")
                 else:
@@ -1079,7 +1110,8 @@ def dashboard():
             maps_links=[buat_link_maps(r[0]) for r in just_rows], error=error,
             firebase_ready=firebase_ready,
             tabel_html=render_tabel(rows),
-            edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None
+            edit_key=None, edit_route=None, edit_slot=None, edit_start=None, edit_selesai=None,
+            voice_options=VOICE_OPTIONS, current_voice=ambil_voice()
         )
 
     # GET
@@ -1105,7 +1137,8 @@ def dashboard():
         firebase_ready=firebase_ready,
         tabel_html=render_tabel(rows),
         edit_key=edit_key, edit_route=edit_route, edit_slot=edit_slot,
-        edit_start=edit_start, edit_selesai=edit_selesai
+        edit_start=edit_start, edit_selesai=edit_selesai,
+        voice_options=VOICE_OPTIONS, current_voice=ambil_voice()
     )
 
 def run_web():
@@ -1270,7 +1303,7 @@ def cek_alarm():
             selisih = abs((now_dt - jam_alarm).total_seconds())
             if selisih <= 30 and key not in sent_today:
                 kirim(f"🔔 {jenis} LOADING\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
-                buat_pengumuman(jenis, route, slot, waktu)
+                buat_pengumuman(jenis, route, slot, waktu, voice=ambil_voice())
                 sent_today.add(key)
 
             if jenis == "START":
@@ -1280,7 +1313,7 @@ def cek_alarm():
                 key_30 = ("REMINDER_FREELOAD", jenis, route, waktu, now_dt.date())
 
                 if selisih_30 <= 30 and key_30 not in sent_today:
-                    buat_pengumuman("REMINDER_FREELOAD", route, slot, waktu)
+                    buat_pengumuman("REMINDER_FREELOAD", route, slot, waktu, voice=ambil_voice())
                     sent_today.add(key_30)
 
                 # Reminder 10 menit sebelum mulai loading
@@ -1290,7 +1323,7 @@ def cek_alarm():
 
                 if selisih_r <= 30 and key_r not in sent_today:
                     kirim(f"⏳ H-10 MENIT {jenis}\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
-                    buat_pengumuman("REMINDER", route, slot, waktu)
+                    buat_pengumuman("REMINDER", route, slot, waktu, voice=ambil_voice())
                     sent_today.add(key_r)
 
             elif jenis == "SELESAI":
@@ -1301,7 +1334,7 @@ def cek_alarm():
 
                 if selisih_15 <= 30 and key_15 not in sent_today:
                     kirim(f"⏳ H-15 MENIT SELESAI LOADING\n📍 {route}{slot_line}\n⏰ {waktu} WIB")
-                    buat_pengumuman("REMINDER_SELESAI", route, slot, waktu)
+                    buat_pengumuman("REMINDER_SELESAI", route, slot, waktu, voice=ambil_voice())
                     sent_today.add(key_15)
 
         except Exception as e:
