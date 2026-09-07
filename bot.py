@@ -635,6 +635,7 @@ Password:<br>
 <option value="{{ kode }}" {% if kode == current_voice %}selected{% endif %}>{{ label }}</option>
 {% endfor %}
 </select>
+<input type="password" name="password" placeholder="password"><br>
 <button type="submit">Simpan Suara</button>
 </form>
 
@@ -1001,7 +1002,8 @@ def render_tabel(rows):
         status_list=status_list_hasil,
         warna_baris=hitung_warna_baris(just_rows),
         sandar_list=hitung_sandar_list(just_rows, status_list_hasil),
-        maps_links=[buat_link_maps(r[0]) for r in just_rows]
+        maps_links=[buat_link_maps(r[0]) for r in just_rows],
+        voice_options=VOICE_OPTIONS, current_voice=ambil_voice()
     )
 
 @app.route("/partial-table")
