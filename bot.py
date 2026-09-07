@@ -627,6 +627,8 @@ Password:<br>
 {% endif %}
 </form>
 
+<div style="display:flex; flex-wrap:wrap; gap:24px; margin-top:10px;">
+<div style="flex:1 1 260px; min-width:260px;">
 <h3>Suara Pengumuman</h3>
 <form method="post">
 <input type="hidden" name="action" value="set_voice">
@@ -638,7 +640,9 @@ Password:<br>
 <input type="password" name="password" placeholder="password"><br>
 <button type="submit">Simpan Suara</button>
 </form>
+</div>
 
+<div style="flex:1 1 260px; min-width:260px;">
 <h3>Import Jadwal dari CSV</h3>
 <p style="color:#a00;">⚠️ Ini akan MENGHAPUS semua jadwal lama dan menggantinya dengan isi file CSV yang diupload. Status "Sudah Sandar" hari ini juga akan ikut hilang.</p>
 <form method="post" enctype="multipart/form-data" onsubmit="return confirm('Yakin? Semua jadwal lama akan dihapus dan diganti isi file CSV ini.')">
@@ -649,6 +653,8 @@ Password:<br>
 <input type="password" name="password"><br><br>
 <button type="submit">Import & Ganti Semua Jadwal</button>
 </form>
+</div>
+</div>
 """
 
 # ========================
