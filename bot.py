@@ -6,7 +6,7 @@ import base64
 import urllib.parse
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from flask import Flask, request, redirect, render_template_string, Response
+from flask import Flask, request, redirect, render_template_string, Response, jsonify
 from threading import Thread
 from announcer import buat_pengumuman, announcement_queue, ALARM_SOUND_URL, VOICE_OPTIONS, TTS_VOICE
 
@@ -154,6 +154,17 @@ body.dark .widget-handle:active { background:rgba(255,255,255,.1); }
   border:1px solid #ccc; border-radius:6px; padding:6px; font-family:inherit; font-size:13px;
 }
 body.dark #widget-catatan textarea { background:#2a2a2a; color:#eee; border:1px solid #555; }
+#widget-catatan .chat-box {
+  width:100%; box-sizing:border-box; height:160px; overflow-y:auto;
+  border:1px solid #ccc; border-radius:6px; padding:6px; font-size:13px; background:#fafafa;
+}
+body.dark #widget-catatan .chat-box { background:#2a2a2a; border:1px solid #555; }
+#widget-catatan .chat-baris { padding:3px 0; border-bottom:1px solid #eee; }
+body.dark #widget-catatan .chat-baris { border-bottom:1px solid #444; }
+#widget-catatan input[type="text"] {
+  box-sizing:border-box; border:1px solid #ccc; border-radius:6px; padding:6px; font-family:inherit; font-size:13px;
+}
+body.dark #widget-catatan input[type="text"] { background:#2a2a2a; color:#eee; border:1px solid #555; }
 
 /* Layar sempit (HP): widget ditumpuk 1 kolom vertikal - pola reorder atas-bawah
    yang familiar (mirip app Notes/Reminders), bukan sejajar berdesakan. */
@@ -212,8 +223,13 @@ if ('serviceWorker' in navigator) {
     <div id="tanggalDigital"></div>
   </div>
   <div class="widget-card" data-widget="catatan" id="widget-catatan">
-    <p class="widget-title">Catatan Bebas <span class="widget-handle">⠿</span></p>
-    <textarea id="catatanBebas" placeholder="Tulis catatan operator di sini..."></textarea>
+    <p class="widget-title">Live Chat Operator <span class="widget-handle">⠿</span></p>
+    <div id="chatPesan" class="chat-box"></div>
+    <div style="display:flex; gap:6px; margin-top:6px;">
+      <input type="text" id="chatNama" placeholder="Nama" style="width:70px; flex:0 0 auto;">
+      <input type="text" id="chatInput" placeholder="Tulis pesan...  " style="flex:1;">
+      <button id="chatKirim" class="btn-aksen">Kirim</button>
+    </div>
   </div>
 </div>
 
@@ -399,17 +415,110 @@ function updateJamDigital() {
 }
 setInterval(updateJamDigital, 1000);
 
-// ----- Widget: Catatan Bebas -----
-// Autosave ke localStorage tiap kali diketik (debounce ringan supaya tidak nulis
-// ke localStorage di setiap keystroke).
-const catatanEl = document.getElementById('catatanBebas');
-catatanEl.value = localStorage.getItem('catatanBebas') || '';
-let catatanTimer = null;
-catatanEl.addEventListener('input', () => {
-    clearTimeout(catatanTimer);
-    catatanTimer = setTimeout(() => {
-        localStorage.setItem('catatanBebas', catatanEl.value);
-    }, 400);
+// ----- Widget: Live Chat Operator -----
+// Pesan disimpan di Firebase (path "chat"), di-poll berkala supaya semua
+// perangkat yang buka dashboard bisa saling lihat pesan secara live.
+const chatBox = document.getElementById('chatPesan');
+const chatInput = document.getElementById('chatInput');
+const chatNamaEl = document.getElementById('chatNama');
+const chatKirimBtn = document.getElementById('chatKirim');
+
+chatNamaEl.value = localStorage.getItem('chatNama') || '';
+chatNamaEl.addEventListener('input', () => localStorage.setItem('chatNama', chatNamaEl.value));
+
+let lastChatId = '';
+let chatSudahInit = false;
+// Notifikasi suara chat ikut status tombol "Suara Aktif" yang sudah ada,
+// supaya operator cukup aktifkan sekali untuk suara alarm + suara chat.
+let chatSuaraAktif = localStorage.getItem('suaraAktif') === '1';
+
+function bunyikanNotifikasiChat() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+        console.error('Notifikasi chat gagal main:', e);
+    }
+}
+
+function tambahBarisChat(pesan) {
+    const baris = document.createElement('div');
+    baris.className = 'chat-baris';
+
+    const spanJam = document.createElement('span');
+    spanJam.style.cssText = 'float:right; color:#999; font-size:11px;';
+    spanJam.textContent = pesan.waktu ? new Date(pesan.waktu).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' }) : '';
+    baris.appendChild(spanJam);
+
+    const bNama = document.createElement('b');
+    bNama.textContent = (pesan.pengirim || 'Operator') + ': ';
+    baris.appendChild(bNama);
+
+    const spanTeks = document.createElement('span');
+    spanTeks.textContent = pesan.text;
+    baris.appendChild(spanTeks);
+
+    chatBox.appendChild(baris);
+}
+
+async function cekChat() {
+    try {
+        const res = await fetch('/api/chat?since=' + encodeURIComponent(lastChatId));
+        const data = await res.json();
+        if (!data.length) return;
+
+        const sudahDiBawah = chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 20;
+
+        data.forEach(p => tambahBarisChat(p));
+        lastChatId = data[data.length - 1].id;
+
+        if (sudahDiBawah || !chatSudahInit) {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        if (chatSudahInit && chatSuaraAktif) {
+            bunyikanNotifikasiChat();
+        }
+        chatSudahInit = true;
+    } catch (e) {
+        console.error('Chat polling error:', e);
+    }
+}
+setInterval(cekChat, 4000);
+cekChat();
+
+async function kirimChat() {
+    const teks = chatInput.value.trim();
+    if (!teks) return;
+    chatInput.value = '';
+    try {
+        await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: teks, pengirim: chatNamaEl.value.trim() })
+        });
+        cekChat();
+    } catch (e) {
+        console.error('Gagal kirim chat:', e);
+    }
+}
+chatKirimBtn.addEventListener('click', kirimChat);
+chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') kirimChat();
+});
+
+// Tombol "Suara Aktif" yang sudah ada juga mengaktifkan notifikasi suara chat
+document.getElementById('aktifkanSuara').addEventListener('click', () => {
+    chatSuaraAktif = true;
 });
 
 // ----- Tema: warna aksen & background -----
@@ -999,7 +1108,39 @@ def api_announcements():
         since = 0
     hasil = [a for a in announcement_queue if a["id"] > since]
     return jsonify(hasil)
-    
+
+@app.route("/api/chat")
+def api_chat():
+    """Kembalikan semua pesan chat dengan key > 'since' (urut kronologis).
+    Key push Firebase memang didesain agar urut secara string, jadi cukup
+    dibandingkan sebagai string tanpa perlu field id numerik terpisah."""
+    since = request.args.get("since", "")
+    data = fb_get("chat") or {}
+    hasil = []
+    for key in sorted(data.keys()):
+        if key > since:
+            item = data[key] or {}
+            hasil.append({
+                "id": key,
+                "text": item.get("text", ""),
+                "pengirim": item.get("pengirim", ""),
+                "waktu": item.get("waktu", "")
+            })
+    return jsonify(hasil)
+
+@app.route("/api/chat/send", methods=["POST"])
+def api_chat_send():
+    """Terima satu pesan chat baru dari operator (tanpa perlu password,
+    supaya cepat dipakai sambil kerja seperti chat biasa)."""
+    body = request.get_json(silent=True) or {}
+    teks = (body.get("text") or "").strip()[:500]
+    pengirim = (body.get("pengirim") or "").strip()[:30]
+    if not teks:
+        return jsonify({"ok": False, "error": "Pesan kosong"}), 400
+    waktu = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+    fb_post("chat", {"text": teks, "pengirim": pengirim, "waktu": waktu})
+    return jsonify({"ok": True})
+
 def render_tabel(rows):
     """Render isi tabel dashboard agar bisa dipakai oleh halaman utama dan AJAX."""
     just_rows = [v for k, v in rows]
