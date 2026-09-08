@@ -225,10 +225,12 @@ if ('serviceWorker' in navigator) {
   <div class="widget-card" data-widget="catatan" id="widget-catatan">
     <p class="widget-title">Live Chat Operator <span class="widget-handle">⠿</span></p>
     <div id="chatPesan" class="chat-box"></div>
-    <div style="display:flex; gap:6px; margin-top:6px;">
+    <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
       <input type="text" id="chatNama" placeholder="Nama" style="width:70px; flex:0 0 auto;">
-      <input type="text" id="chatInput" placeholder="Tulis pesan...  " style="flex:1;">
+      <input type="text" id="chatInput" placeholder="Tulis pesan...  " style="flex:1 1 120px;">
+      <input type="password" id="chatPassword" placeholder="Password" style="width:90px; flex:0 0 auto;">
       <button id="chatKirim" class="btn-aksen">Kirim</button>
+      <button id="chatHapus" class="btn-aksen" style="background:#a00;" title="Hapus semua chat">🗑️ Hapus Chat</button>
     </div>
   </div>
 </div>
@@ -421,7 +423,9 @@ setInterval(updateJamDigital, 1000);
 const chatBox = document.getElementById('chatPesan');
 const chatInput = document.getElementById('chatInput');
 const chatNamaEl = document.getElementById('chatNama');
+const chatPasswordEl = document.getElementById('chatPassword');
 const chatKirimBtn = document.getElementById('chatKirim');
+const chatHapusBtn = document.getElementById('chatHapus');
 
 chatNamaEl.value = localStorage.getItem('chatNama') || '';
 chatNamaEl.addEventListener('input', () => localStorage.setItem('chatNama', chatNamaEl.value));
@@ -499,13 +503,19 @@ cekChat();
 async function kirimChat() {
     const teks = chatInput.value.trim();
     if (!teks) return;
-    chatInput.value = '';
+    const pass = chatPasswordEl.value;
     try {
-        await fetch('/api/chat/send', {
+        const res = await fetch('/api/chat/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: teks, pengirim: chatNamaEl.value.trim() })
+            body: JSON.stringify({ text: teks, pengirim: chatNamaEl.value.trim(), password: pass })
         });
+        const hasil = await res.json();
+        if (!hasil.ok) {
+            alert(hasil.error || 'Gagal mengirim pesan.');
+            return;
+        }
+        chatInput.value = '';
         cekChat();
     } catch (e) {
         console.error('Gagal kirim chat:', e);
@@ -515,6 +525,32 @@ chatKirimBtn.addEventListener('click', kirimChat);
 chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') kirimChat();
 });
+
+async function hapusChat() {
+    const pass = chatPasswordEl.value;
+    if (!pass) {
+        alert('Masukkan password dulu untuk hapus chat.');
+        return;
+    }
+    if (!confirm('Yakin mau hapus semua riwayat chat? Tidak bisa dibatalkan.')) return;
+    try {
+        const res = await fetch('/api/chat/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pass })
+        });
+        const hasil = await res.json();
+        if (!hasil.ok) {
+            alert(hasil.error || 'Gagal menghapus chat.');
+            return;
+        }
+        chatBox.innerHTML = '';
+        lastChatId = '';
+    } catch (e) {
+        console.error('Gagal hapus chat:', e);
+    }
+}
+chatHapusBtn.addEventListener('click', hapusChat);
 
 // Tombol "Suara Aktif" yang sudah ada juga mengaktifkan notifikasi suara chat
 document.getElementById('aktifkanSuara').addEventListener('click', () => {
@@ -1130,15 +1166,30 @@ def api_chat():
 
 @app.route("/api/chat/send", methods=["POST"])
 def api_chat_send():
-    """Terima satu pesan chat baru dari operator (tanpa perlu password,
-    supaya cepat dipakai sambil kerja seperti chat biasa)."""
+    """Terima satu pesan chat baru dari operator. Wajib password dashboard,
+    supaya cuma operator yang tahu password yang bisa ikut chat."""
     body = request.get_json(silent=True) or {}
+    password = body.get("password", "")
+    if not DASHBOARD_PASSWORD or password != DASHBOARD_PASSWORD:
+        return jsonify({"ok": False, "error": "Password salah."}), 403
+
     teks = (body.get("text") or "").strip()[:500]
     pengirim = (body.get("pengirim") or "").strip()[:30]
     if not teks:
         return jsonify({"ok": False, "error": "Pesan kosong"}), 400
     waktu = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
     fb_post("chat", {"text": teks, "pengirim": pengirim, "waktu": waktu})
+    return jsonify({"ok": True})
+
+@app.route("/api/chat/clear", methods=["POST"])
+def api_chat_clear():
+    """Hapus seluruh riwayat chat (butuh password dashboard) supaya pesan
+    lama tidak menumpuk terus di widget."""
+    body = request.get_json(silent=True) or {}
+    password = body.get("password", "")
+    if not DASHBOARD_PASSWORD or password != DASHBOARD_PASSWORD:
+        return jsonify({"ok": False, "error": "Password salah."}), 403
+    fb_delete("chat")
     return jsonify({"ok": True})
 
 def render_tabel(rows):
