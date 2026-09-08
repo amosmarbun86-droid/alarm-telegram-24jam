@@ -600,6 +600,8 @@ TABEL_HTML = """
 {% endfor %}
 </table>
 
+<div style="display:flex; flex-wrap:wrap; gap:24px; margin-top:10px;">
+<div style="flex:1 1 260px; min-width:260px;">
 <h3>{{ "Edit Jadwal" if edit_key else "Tambah Jadwal" }}</h3>
 
 {% if error %}
@@ -626,8 +628,8 @@ Password:<br>
 &nbsp;<a href="/">Batal</a>
 {% endif %}
 </form>
+</div>
 
-<div style="display:flex; flex-wrap:wrap; gap:24px; margin-top:10px;">
 <div style="flex:1 1 260px; min-width:260px;">
 <h3>Suara Pengumuman</h3>
 <form method="post">
