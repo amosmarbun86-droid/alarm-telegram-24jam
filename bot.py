@@ -179,20 +179,23 @@ body.dark #panelPersonalisasi { background:#1e1e1e; }
 #panelPersonalisasi.terbuka { display:block; }
 
 /* ===== Widget Dashboard ===== */
-/* Pakai CSS columns (bukan flex) supaya widget pendek (Ringkasan, Jam) otomatis
-   "numpuk" mengisi tinggi kolom, alih-alih nyisain ruang kosong di sebelah
-   Live Chat yang tinggi. Drag-reorder tetap jalan karena pakai posisi visual
-   (bounding box), bukan asumsi baris flex. */
+/* widget-row: 2 kolom tetap. Kiri = widgetGrid (Ringkasan/Jam/Cuaca, bisa
+   digeser urutannya). Kanan = Live Chat, berdiri sendiri, tidak ikut digeser,
+   supaya tidak nyisain ruang kosong di sebelahnya. */
+.widget-row {
+  display:flex; gap:10px; align-items:flex-start; margin-bottom:14px;
+}
 .widget-grid {
-  column-count: 2; column-gap:10px; margin-bottom:14px;
+  display:flex; flex-direction:column; gap:10px; flex:1 1 0;
+}
+.widget-row > .widget-chat-tersendiri {
+  flex:1 1 0;
 }
 .widget-card {
   background:white; border-radius:10px; padding:12px 14px;
   box-shadow:0 1px 3px rgba(0,0,0,.15);
   box-sizing:border-box; width:100%;
   position:relative; touch-action:pan-y;
-  break-inside: avoid; -webkit-column-break-inside: avoid;
-  margin-bottom:10px; display:inline-block;
 }
 body.dark .widget-card { background:#1e1e1e; color:#eee; }
 .widget-card.dragging {
@@ -253,7 +256,7 @@ body.dark #widget-catatan .chat-baris.chat-sistem { color:#aaa; }
 /* Layar sempit (HP): widget ditumpuk 1 kolom vertikal - pola reorder atas-bawah
    yang familiar (mirip app Notes/Reminders), bukan sejajar berdesakan. */
 @media (max-width: 480px) {
-  .widget-grid { column-count: 1; }
+  .widget-row { flex-direction: column; }
 }
 </style>
 
@@ -291,6 +294,7 @@ if ('serviceWorker' in navigator) {
   </p>
 </div>
 
+<div class="widget-row" id="widgetRow">
 <div class="widget-grid" id="widgetGrid">
   <div class="widget-card" data-widget="ringkasan" id="widget-ringkasan">
     <p class="widget-title">Ringkasan Status <span class="widget-handle">⠿</span></p>
@@ -309,8 +313,9 @@ if ('serviceWorker' in navigator) {
     <p class="widget-title">Cuaca (Tapanuli Utara) <span class="widget-handle">⠿</span></p>
     <div id="cuacaIsi">Memuat...</div>
   </div>
-  <div class="widget-card" data-widget="catatan" id="widget-catatan">
-    <p class="widget-title">Live Chat Operator <span class="widget-handle">⠿</span></p>
+</div>
+<div class="widget-card widget-chat-tersendiri" data-widget="catatan" id="widget-catatan">
+    <p class="widget-title">Live Chat Operator</p>
     <div id="chatOnline" class="chat-online">🟢 ...</div>
     <div id="chatPesan" class="chat-box"></div>
     <div class="chat-reaksi" style="margin-top:4px;">
@@ -326,7 +331,7 @@ if ('serviceWorker' in navigator) {
       <button id="chatHapus" class="btn-aksen" style="background:#a00;" title="Hapus semua chat">🗑️ Hapus Chat</button>
     </div>
     <span id="chatRiwayatLink" class="chat-riwayat-link">Tampilkan riwayat lama</span>
-  </div>
+</div>
 </div>
 
 {% if not firebase_ready %}
@@ -827,8 +832,9 @@ function muatUrutanWidget() {
     try {
         const urutan = JSON.parse(saved);
         urutan.forEach(id => {
+            if (id === 'catatan') return;  // Live Chat sekarang berdiri sendiri, tidak ikut digeser
             const el = document.getElementById('widget-' + id);
-            if (el) widgetGrid.appendChild(el);
+            if (el && el.parentElement === widgetGrid) widgetGrid.appendChild(el);
         });
     } catch (e) {
         console.error('Gagal memuat urutan widget:', e);
