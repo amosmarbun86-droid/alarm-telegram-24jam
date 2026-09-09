@@ -1,4 +1,5 @@
 import csv
+import re
 import time
 import requests
 import os
@@ -1291,22 +1292,52 @@ def api_chat_send():
     waktu = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
 
     if teks.lower().startswith("/sandar "):
-        query = teks[8:].strip().lower()
-        if not query:
-            return jsonify({"ok": False, "error": "Format: /sandar <sebagian nama rute>"}), 400
+        query_asli = teks[8:].strip().lower()
+        if not query_asli:
+            return jsonify({"ok": False, "error": "Format: /sandar <sebagian nama rute> [jam mulai]"}), 400
+
+        # Boleh disambiguasi pakai jam mulai, contoh: "/sandar ulu barumun 23:45"
+        m = re.search(r"(\d{1,2}:\d{2})\s*$", query_asli)
+        jam_filter = None
+        query = query_asli
+        if m:
+            jam_filter = m.group(1)
+            if len(jam_filter.split(":")[0]) == 1:
+                jam_filter = "0" + jam_filter
+            query = query_asli[:m.start()].strip()
+
         rows_now = baca_rows()
-        cocok = None
-        for k, v in rows_now:
-            if query in v[0].lower():
-                cocok = (k, v)
-                break
-        if not cocok:
+        just_rows_now = [v for k, v in rows_now]
+        status_list_now = hitung_status_list(just_rows_now)
+
+        cocok_semua = []
+        for (k, v), status in zip(rows_now, status_list_now):
+            if query and query not in v[0].lower():
+                continue
+            if jam_filter and v[2].strip() != jam_filter:
+                continue
+            cocok_semua.append((k, v, status))
+
+        if not cocok_semua:
             return jsonify({"ok": False, "error": f"Rute mengandung '{query}' tidak ditemukan."}), 404
-        key, v = cocok
+
+        if len(cocok_semua) > 1:
+            # Coba persempit otomatis: prioritaskan rute yang BELUM selesai
+            belum_selesai = [c for c in cocok_semua if c[2] != "selesai"]
+            kandidat = belum_selesai if len(belum_selesai) == 1 else cocok_semua
+            if len(kandidat) > 1:
+                daftar = "; ".join(f"{v[0]} (jam {v[2]})" for k, v, s in kandidat[:6])
+                return jsonify({
+                    "ok": False,
+                    "error": f"Ada {len(kandidat)} rute yang cocok, tulis lebih spesifik atau tambah jam. Contoh: /sandar {query} {kandidat[0][1][2]}. Kandidat: {daftar}"
+                }), 409
+            cocok_semua = kandidat
+
+        key, v, status = cocok_semua[0]
         set_sandar(key, True)
         waktu_sandar = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%H:%M")
         buat_pengumuman("SANDAR", v[0], v[1], waktu_sandar, voice=ambil_voice())
-        pesan_sistem = f"✅ {pengirim or 'Operator'} menandai SUDAH SANDAR: {v[0]}"
+        pesan_sistem = f"✅ {pengirim or 'Operator'} menandai SUDAH SANDAR: {v[0]} (jam {v[2]})"
         fb_post("chat", {"text": pesan_sistem, "pengirim": "Sistem", "waktu": waktu, "sistem": True})
         return jsonify({"ok": True})
 
