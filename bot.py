@@ -41,6 +41,70 @@ last_update = None
 # ========================
 app = Flask(__name__)
 
+# ===== Widget Cuaca (Open-Meteo, gratis, tanpa API key) =====
+# Lokasi: Sipoholon/Tarutung, Tapanuli Utara, Sumatera Utara
+CUACA_LAT = 2.017
+CUACA_LON = 98.967
+_cuaca_cache = {"data": None, "waktu_ambil": 0}
+CUACA_CACHE_DETIK = 600  # 10 menit, biar tidak spam API tiap dashboard di-poll
+
+CUACA_KODE_WMO = {
+    0: ("Cerah", "☀️"),
+    1: ("Cerah berawan", "🌤️"),
+    2: ("Berawan sebagian", "⛅"),
+    3: ("Mendung", "☁️"),
+    45: ("Berkabut", "🌫️"),
+    48: ("Berkabut", "🌫️"),
+    51: ("Gerimis ringan", "🌦️"),
+    53: ("Gerimis", "🌦️"),
+    55: ("Gerimis lebat", "🌧️"),
+    61: ("Hujan ringan", "🌧️"),
+    63: ("Hujan", "🌧️"),
+    65: ("Hujan lebat", "⛈️"),
+    80: ("Hujan lokal ringan", "🌦️"),
+    81: ("Hujan lokal", "🌧️"),
+    82: ("Hujan lokal lebat", "⛈️"),
+    95: ("Badai petir", "⛈️"),
+    96: ("Badai petir + hujan es", "⛈️"),
+    99: ("Badai petir + hujan es", "⛈️"),
+}
+
+def ambil_cuaca():
+    """Ambil cuaca terkini dari Open-Meteo, di-cache 10 menit supaya tidak
+    memanggil API eksternal tiap kali dashboard di-poll oleh banyak perangkat."""
+    sekarang = time.time()
+    if _cuaca_cache["data"] and (sekarang - _cuaca_cache["waktu_ambil"] < CUACA_CACHE_DETIK):
+        return _cuaca_cache["data"]
+    try:
+        r = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": CUACA_LAT, "longitude": CUACA_LON,
+                "current_weather": "true", "timezone": "Asia/Jakarta"
+            },
+            timeout=8
+        )
+        r.raise_for_status()
+        cw = r.json().get("current_weather", {})
+        kode = int(cw.get("weathercode", -1))
+        deskripsi, ikon = CUACA_KODE_WMO.get(kode, ("Tidak diketahui", "❔"))
+        hasil = {
+            "suhu": round(cw.get("temperature", 0)),
+            "angin": round(cw.get("windspeed", 0)),
+            "deskripsi": deskripsi,
+            "ikon": ikon,
+            "ok": True
+        }
+        _cuaca_cache["data"] = hasil
+        _cuaca_cache["waktu_ambil"] = sekarang
+        return hasil
+    except Exception as e:
+        print(f"CUACA ERROR: {e}")
+        # Kalau gagal tapi masih ada cache lama, pakai itu daripada kosong total
+        if _cuaca_cache["data"]:
+            return _cuaca_cache["data"]
+        return {"ok": False, "error": "Gagal ambil data cuaca"}
+
 HTML = """
 <!DOCTYPE html>
 <html lang="id">
@@ -156,6 +220,10 @@ body.dark .widget-handle:active { background:rgba(255,255,255,.1); }
 #widget-ringkasan .ringkasan-item b { font-size:20px; display:block; }
 #widget-jam #jamDigital { font-size:26px; font-weight:bold; font-variant-numeric: tabular-nums; }
 #widget-jam #tanggalDigital { font-size:12px; color:#888; }
+#widget-cuaca #cuacaIsi { font-size:14px; }
+#widget-cuaca .cuaca-suhu { font-size:26px; font-weight:bold; }
+#widget-cuaca .cuaca-ikon { font-size:28px; vertical-align:middle; margin-right:6px; }
+#widget-cuaca .cuaca-sub { font-size:12px; color:#888; }
 #widget-catatan textarea {
   width:100%; box-sizing:border-box; min-height:70px; resize:vertical;
   border:1px solid #ccc; border-radius:6px; padding:6px; font-family:inherit; font-size:13px;
@@ -236,6 +304,10 @@ if ('serviceWorker' in navigator) {
     <p class="widget-title">Jam Sekarang (WIB) <span class="widget-handle">⠿</span></p>
     <div id="jamDigital">--:--:--</div>
     <div id="tanggalDigital"></div>
+  </div>
+  <div class="widget-card" data-widget="cuaca" id="widget-cuaca">
+    <p class="widget-title">Cuaca (Tapanuli Utara) <span class="widget-handle">⠿</span></p>
+    <div id="cuacaIsi">Memuat...</div>
   </div>
   <div class="widget-card" data-widget="catatan" id="widget-catatan">
     <p class="widget-title">Live Chat Operator <span class="widget-handle">⠿</span></p>
@@ -438,6 +510,28 @@ function updateJamDigital() {
     document.getElementById('tanggalDigital').textContent = now.toLocaleDateString('id-ID', opsiTanggal);
 }
 setInterval(updateJamDigital, 1000);
+
+// ----- Widget: Cuaca -----
+async function muatCuaca() {
+    try {
+        const res = await fetch('/api/cuaca');
+        const c = await res.json();
+        const el = document.getElementById('cuacaIsi');
+        if (!c.ok) {
+            el.innerHTML = '<span style="color:#a00;">Cuaca tidak tersedia</span>';
+            return;
+        }
+        el.innerHTML =
+            '<span class="cuaca-ikon">' + c.ikon + '</span>' +
+            '<span class="cuaca-suhu">' + c.suhu + '°C</span><br>' +
+            '<span>' + c.deskripsi + '</span><br>' +
+            '<span class="cuaca-sub">Angin ' + c.angin + ' km/jam</span>';
+    } catch (e) {
+        document.getElementById('cuacaIsi').innerHTML = '<span style="color:#a00;">Gagal memuat cuaca</span>';
+    }
+}
+muatCuaca();
+setInterval(muatCuaca, 600000);
 
 // ----- Widget: Live Chat Operator -----
 // Pesan disimpan di Firebase (path "chat"), di-poll berkala supaya semua
@@ -1348,6 +1442,10 @@ def api_chat_send():
 
     fb_post("chat", {"text": teks, "pengirim": pengirim, "waktu": waktu})
     return jsonify({"ok": True})
+
+@app.route("/api/cuaca")
+def api_cuaca():
+    return jsonify(ambil_cuaca())
 
 @app.route("/api/presence/ping", methods=["POST"])
 def api_presence_ping():
