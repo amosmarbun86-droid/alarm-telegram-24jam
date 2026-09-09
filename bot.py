@@ -115,14 +115,20 @@ body.dark #panelPersonalisasi { background:#1e1e1e; }
 #panelPersonalisasi.terbuka { display:block; }
 
 /* ===== Widget Dashboard ===== */
+/* Pakai CSS columns (bukan flex) supaya widget pendek (Ringkasan, Jam) otomatis
+   "numpuk" mengisi tinggi kolom, alih-alih nyisain ruang kosong di sebelah
+   Live Chat yang tinggi. Drag-reorder tetap jalan karena pakai posisi visual
+   (bounding box), bukan asumsi baris flex. */
 .widget-grid {
-  display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:flex-start;
+  column-count: 2; column-gap:10px; margin-bottom:14px;
 }
 .widget-card {
   background:white; border-radius:10px; padding:12px 14px;
   box-shadow:0 1px 3px rgba(0,0,0,.15);
-  flex:1 1 200px; min-width:160px; box-sizing:border-box;
+  box-sizing:border-box; width:100%;
   position:relative; touch-action:pan-y;
+  break-inside: avoid; -webkit-column-break-inside: avoid;
+  margin-bottom:10px; display:inline-block;
 }
 body.dark .widget-card { background:#1e1e1e; color:#eee; }
 .widget-card.dragging {
@@ -179,8 +185,7 @@ body.dark #widget-catatan .chat-baris.chat-sistem { color:#aaa; }
 /* Layar sempit (HP): widget ditumpuk 1 kolom vertikal - pola reorder atas-bawah
    yang familiar (mirip app Notes/Reminders), bukan sejajar berdesakan. */
 @media (max-width: 480px) {
-  .widget-grid { flex-direction: column; }
-  .widget-card { flex: 1 1 100%; }
+  .widget-grid { column-count: 1; }
 }
 </style>
 
