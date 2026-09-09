@@ -165,6 +165,15 @@ body.dark #widget-catatan .chat-baris { border-bottom:1px solid #444; }
   box-sizing:border-box; border:1px solid #ccc; border-radius:6px; padding:6px; font-family:inherit; font-size:13px;
 }
 body.dark #widget-catatan input[type="text"] { background:#2a2a2a; color:#eee; border:1px solid #555; }
+#widget-catatan .chat-baris.chat-urgent { background:#ffe0e0; border-left:3px solid #c00; padding-left:6px; font-weight:bold; }
+body.dark #widget-catatan .chat-baris.chat-urgent { background:#4a1f1f; }
+#widget-catatan .chat-baris.chat-mention { background:#fff6d5; border-left:3px solid #d9a400; padding-left:6px; }
+body.dark #widget-catatan .chat-baris.chat-mention { background:#4a3f1f; }
+#widget-catatan .chat-baris.chat-sistem { color:#666; font-style:italic; font-size:12px; }
+body.dark #widget-catatan .chat-baris.chat-sistem { color:#aaa; }
+#widget-catatan .chat-online { font-size:12px; color:#2a2; margin-bottom:4px; }
+#widget-catatan .chat-reaksi button { font-size:15px; padding:2px 8px; margin-right:4px; cursor:pointer; }
+#widget-catatan .chat-riwayat-link { font-size:12px; color:#06c; cursor:pointer; text-decoration:underline; margin-top:4px; display:inline-block; }
 
 /* Layar sempit (HP): widget ditumpuk 1 kolom vertikal - pola reorder atas-bawah
    yang familiar (mirip app Notes/Reminders), bukan sejajar berdesakan. */
@@ -224,14 +233,21 @@ if ('serviceWorker' in navigator) {
   </div>
   <div class="widget-card" data-widget="catatan" id="widget-catatan">
     <p class="widget-title">Live Chat Operator <span class="widget-handle">⠿</span></p>
+    <div id="chatOnline" class="chat-online">🟢 ...</div>
     <div id="chatPesan" class="chat-box"></div>
+    <div class="chat-reaksi" style="margin-top:4px;">
+      <button type="button" data-emoji="👍 Oke, diterima">👍</button>
+      <button type="button" data-emoji="✅ Loading selesai">✅</button>
+      <button type="button" data-emoji="⚠️ Darurat, butuh bantuan!">⚠️</button>
+    </div>
     <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
       <input type="text" id="chatNama" placeholder="Nama" style="width:70px; flex:0 0 auto;">
-      <input type="text" id="chatInput" placeholder="Tulis pesan...  " style="flex:1 1 120px;">
+      <input type="text" id="chatInput" placeholder="Tulis pesan... (/sandar nama rute)" style="flex:1 1 120px;">
       <input type="password" id="chatPassword" placeholder="Password" style="width:90px; flex:0 0 auto;">
       <button id="chatKirim" class="btn-aksen">Kirim</button>
       <button id="chatHapus" class="btn-aksen" style="background:#a00;" title="Hapus semua chat">🗑️ Hapus Chat</button>
     </div>
+    <span id="chatRiwayatLink" class="chat-riwayat-link">Tampilkan riwayat lama</span>
   </div>
 </div>
 
@@ -421,68 +437,136 @@ setInterval(updateJamDigital, 1000);
 // Pesan disimpan di Firebase (path "chat"), di-poll berkala supaya semua
 // perangkat yang buka dashboard bisa saling lihat pesan secara live.
 const chatBox = document.getElementById('chatPesan');
+const chatOnlineEl = document.getElementById('chatOnline');
 const chatInput = document.getElementById('chatInput');
 const chatNamaEl = document.getElementById('chatNama');
 const chatPasswordEl = document.getElementById('chatPassword');
 const chatKirimBtn = document.getElementById('chatKirim');
 const chatHapusBtn = document.getElementById('chatHapus');
+const chatRiwayatLink = document.getElementById('chatRiwayatLink');
 
 chatNamaEl.value = localStorage.getItem('chatNama') || '';
 chatNamaEl.addEventListener('input', () => localStorage.setItem('chatNama', chatNamaEl.value));
 
 let lastChatId = '';
 let chatSudahInit = false;
+let chatModeSemua = false;  // false = cuma chat hari ini, true = semua riwayat
 // Notifikasi suara chat ikut status tombol "Suara Aktif" yang sudah ada,
 // supaya operator cukup aktifkan sekali untuk suara alarm + suara chat.
 let chatSuaraAktif = localStorage.getItem('suaraAktif') === '1';
 
-function bunyikanNotifikasiChat() {
+const KATA_URGENT = ['urgent', 'darurat', 'macet'];
+
+function nadaBeep(ctx, freq, mulai, durasi, volume) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, ctx.currentTime + mulai);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + mulai + durasi);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime + mulai);
+    osc.stop(ctx.currentTime + mulai + durasi);
+}
+
+function bunyikanNotifikasiChat(level) {
+    // level: 'normal' | 'mention' | 'urgent' - makin penting, bunyi makin beda/panjang
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3);
+        if (level === 'urgent') {
+            nadaBeep(ctx, 1000, 0, 0.18, 0.2);
+            nadaBeep(ctx, 700, 0.22, 0.18, 0.2);
+            nadaBeep(ctx, 1000, 0.44, 0.25, 0.2);
+        } else if (level === 'mention') {
+            nadaBeep(ctx, 950, 0, 0.15, 0.17);
+            nadaBeep(ctx, 1200, 0.17, 0.2, 0.17);
+        } else {
+            nadaBeep(ctx, 880, 0, 0.3, 0.15);
+        }
     } catch (e) {
         console.error('Notifikasi chat gagal main:', e);
     }
 }
 
+function isUrgent(teks) {
+    const rendah = teks.toLowerCase();
+    return KATA_URGENT.some(k => rendah.includes(k));
+}
+function isMention(teks) {
+    const namaSaya = chatNamaEl.value.trim().toLowerCase();
+    if (!namaSaya) return false;
+    return teks.toLowerCase().includes('@' + namaSaya);
+}
+
 function tambahBarisChat(pesan) {
     const baris = document.createElement('div');
-    baris.className = 'chat-baris';
+    const urgent = isUrgent(pesan.text);
+    const mention = isMention(pesan.text);
+    baris.className = 'chat-baris' + (pesan.sistem ? ' chat-sistem' : '') + (urgent ? ' chat-urgent' : (mention ? ' chat-mention' : ''));
 
     const spanJam = document.createElement('span');
     spanJam.style.cssText = 'float:right; color:#999; font-size:11px;';
     spanJam.textContent = pesan.waktu ? new Date(pesan.waktu).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' }) : '';
     baris.appendChild(spanJam);
 
-    const bNama = document.createElement('b');
-    bNama.textContent = (pesan.pengirim || 'Operator') + ': ';
-    baris.appendChild(bNama);
+    if (!pesan.sistem) {
+        const bNama = document.createElement('b');
+        bNama.textContent = (pesan.pengirim || 'Operator') + ': ';
+        baris.appendChild(bNama);
+    }
 
     const spanTeks = document.createElement('span');
-    spanTeks.textContent = pesan.text;
+    spanTeks.textContent = (urgent ? '⚠️ ' : '') + pesan.text;
     baris.appendChild(spanTeks);
 
     chatBox.appendChild(baris);
+    return { urgent, mention };
 }
+
+async function perbaruiOnline() {
+    try {
+        const res = await fetch('/api/presence/count');
+        const data = await res.json();
+        chatOnlineEl.textContent = '🟢 ' + data.count + ' operator online';
+    } catch (e) {
+        chatOnlineEl.textContent = '';
+    }
+}
+
+function kirimPresence() {
+    const nama = chatNamaEl.value.trim() || 'Operator';
+    let sesi = sessionStorage.getItem('chatSesiId');
+    if (!sesi) {
+        sesi = Math.random().toString(36).slice(2) + Date.now();
+        sessionStorage.setItem('chatSesiId', sesi);
+    }
+    fetch('/api/presence/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: sesi, nama: nama })
+    }).catch(() => {});
+}
+kirimPresence();
+setInterval(kirimPresence, 10000);
+perbaruiOnline();
+setInterval(perbaruiOnline, 10000);
 
 async function cekChat() {
     try {
-        const res = await fetch('/api/chat?since=' + encodeURIComponent(lastChatId));
+        const param = chatModeSemua ? '&hari=semua' : '';
+        const res = await fetch('/api/chat?since=' + encodeURIComponent(lastChatId) + param);
         const data = await res.json();
         if (!data.length) return;
 
         const sudahDiBawah = chatBox.scrollTop + chatBox.clientHeight >= chatBox.scrollHeight - 20;
 
-        data.forEach(p => tambahBarisChat(p));
+        let adaUrgent = false, adaMention = false;
+        data.forEach(p => {
+            const hasil = tambahBarisChat(p);
+            if (hasil.urgent) adaUrgent = true;
+            if (hasil.mention) adaMention = true;
+        });
         lastChatId = data[data.length - 1].id;
 
         if (sudahDiBawah || !chatSudahInit) {
@@ -490,7 +574,7 @@ async function cekChat() {
         }
 
         if (chatSudahInit && chatSuaraAktif) {
-            bunyikanNotifikasiChat();
+            bunyikanNotifikasiChat(adaUrgent ? 'urgent' : (adaMention ? 'mention' : 'normal'));
         }
         chatSudahInit = true;
     } catch (e) {
@@ -499,6 +583,15 @@ async function cekChat() {
 }
 setInterval(cekChat, 4000);
 cekChat();
+
+chatRiwayatLink.addEventListener('click', () => {
+    chatModeSemua = !chatModeSemua;
+    chatRiwayatLink.textContent = chatModeSemua ? 'Sembunyikan riwayat lama (kembali ke hari ini)' : 'Tampilkan riwayat lama';
+    chatBox.innerHTML = '';
+    lastChatId = '';
+    chatSudahInit = false;
+    cekChat();
+});
 
 async function kirimChat() {
     const teks = chatInput.value.trim();
@@ -526,7 +619,15 @@ chatInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') kirimChat();
 });
 
+document.querySelectorAll('.chat-reaksi button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        chatInput.value = btn.getAttribute('data-emoji');
+        kirimChat();
+    });
+});
+
 async function hapusChat() {
+
     const pass = chatPasswordEl.value;
     if (!pass) {
         alert('Masukkan password dulu untuk hapus chat.');
@@ -1147,27 +1248,37 @@ def api_announcements():
 
 @app.route("/api/chat")
 def api_chat():
-    """Kembalikan semua pesan chat dengan key > 'since' (urut kronologis).
-    Key push Firebase memang didesain agar urut secara string, jadi cukup
-    dibandingkan sebagai string tanpa perlu field id numerik terpisah."""
+    """Kembalikan pesan chat dengan key > 'since' (urut kronologis).
+    Default cuma pesan HARI INI (biar chat tidak terasa numpuk terus-terusan);
+    kirim ?hari=semua untuk lihat seluruh riwayat lama juga."""
     since = request.args.get("since", "")
+    hari = request.args.get("hari", "")
+    today_str = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%Y-%m-%d")
     data = fb_get("chat") or {}
     hasil = []
     for key in sorted(data.keys()):
         if key > since:
             item = data[key] or {}
+            waktu = item.get("waktu", "")
+            if hari != "semua" and not item.get("sistem") and not waktu.startswith(today_str):
+                continue
             hasil.append({
                 "id": key,
                 "text": item.get("text", ""),
                 "pengirim": item.get("pengirim", ""),
-                "waktu": item.get("waktu", "")
+                "waktu": waktu,
+                "sistem": bool(item.get("sistem"))
             })
     return jsonify(hasil)
 
 @app.route("/api/chat/send", methods=["POST"])
 def api_chat_send():
     """Terima satu pesan chat baru dari operator. Wajib password dashboard,
-    supaya cuma operator yang tahu password yang bisa ikut chat."""
+    supaya cuma operator yang tahu password yang bisa ikut chat.
+
+    Mendukung command singkat "/sandar <sebagian nama rute>" yang langsung
+    menandai baris jadwal itu sebagai "Sudah Sandar", tanpa perlu buka form
+    terpisah. Hasilnya dicatat sebagai pesan sistem di chat."""
     body = request.get_json(silent=True) or {}
     password = body.get("password", "")
     if not DASHBOARD_PASSWORD or password != DASHBOARD_PASSWORD:
@@ -1178,8 +1289,67 @@ def api_chat_send():
     if not teks:
         return jsonify({"ok": False, "error": "Pesan kosong"}), 400
     waktu = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+
+    if teks.lower().startswith("/sandar "):
+        query = teks[8:].strip().lower()
+        if not query:
+            return jsonify({"ok": False, "error": "Format: /sandar <sebagian nama rute>"}), 400
+        rows_now = baca_rows()
+        cocok = None
+        for k, v in rows_now:
+            if query in v[0].lower():
+                cocok = (k, v)
+                break
+        if not cocok:
+            return jsonify({"ok": False, "error": f"Rute mengandung '{query}' tidak ditemukan."}), 404
+        key, v = cocok
+        set_sandar(key, True)
+        waktu_sandar = datetime.now(ZoneInfo("Asia/Jakarta")).strftime("%H:%M")
+        buat_pengumuman("SANDAR", v[0], v[1], waktu_sandar, voice=ambil_voice())
+        pesan_sistem = f"✅ {pengirim or 'Operator'} menandai SUDAH SANDAR: {v[0]}"
+        fb_post("chat", {"text": pesan_sistem, "pengirim": "Sistem", "waktu": waktu, "sistem": True})
+        return jsonify({"ok": True})
+
     fb_post("chat", {"text": teks, "pengirim": pengirim, "waktu": waktu})
     return jsonify({"ok": True})
+
+@app.route("/api/presence/ping", methods=["POST"])
+def api_presence_ping():
+    """Tandai satu perangkat/tab sedang aktif buka dashboard (dipanggil
+    berkala dari JS), dipakai untuk indikator 'X operator online' di chat."""
+    body = request.get_json(silent=True) or {}
+    sesi = (body.get("session") or "").strip()[:40]
+    nama = (body.get("nama") or "Operator").strip()[:30]
+    if not sesi:
+        return jsonify({"ok": False}), 400
+    waktu = datetime.now(ZoneInfo("Asia/Jakarta")).isoformat()
+    fb_put(f"presence/{sesi}", {"nama": nama, "waktu": waktu})
+    return jsonify({"ok": True})
+
+@app.route("/api/presence/count")
+def api_presence_count():
+    """Hitung berapa operator yang masih aktif (ping dalam 20 detik terakhir).
+    Sekalian bersihkan entri presence yang sudah basi (>1 jam) supaya data
+    Firebase tidak menumpuk terus."""
+    data = fb_get("presence") or {}
+    now = datetime.now(ZoneInfo("Asia/Jakarta"))
+    aktif = []
+    kadaluarsa = []
+    for key, item in data.items():
+        item = item or {}
+        try:
+            waktu = datetime.fromisoformat(item.get("waktu", ""))
+        except (ValueError, TypeError):
+            kadaluarsa.append(key)
+            continue
+        selisih = (now - waktu).total_seconds()
+        if selisih <= 20:
+            aktif.append(item.get("nama", "Operator"))
+        elif selisih > 3600:
+            kadaluarsa.append(key)
+    for key in kadaluarsa:
+        fb_delete(f"presence/{key}")
+    return jsonify({"count": len(aktif), "nama": aktif})
 
 @app.route("/api/chat/clear", methods=["POST"])
 def api_chat_clear():
