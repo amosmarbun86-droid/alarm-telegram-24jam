@@ -115,7 +115,7 @@ body.dark #panelPersonalisasi { background:#1e1e1e; }
 
 /* ===== Widget Dashboard ===== */
 .widget-grid {
-  display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;
+  display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:flex-start;
 }
 .widget-card {
   background:white; border-radius:10px; padding:12px 14px;
