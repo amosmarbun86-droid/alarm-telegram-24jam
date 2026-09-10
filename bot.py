@@ -633,7 +633,12 @@ async function perbaruiOnline() {
     try {
         const res = await fetch('/api/presence/count');
         const data = await res.json();
-        chatOnlineEl.textContent = '🟢 ' + data.count + ' operator online';
+        if (!data.count) {
+            chatOnlineEl.textContent = '⚪ Tidak ada yang online';
+            return;
+        }
+        const namaUnik = [...new Set(data.nama)];
+        chatOnlineEl.textContent = '🟢 ' + namaUnik.length + ' online: ' + namaUnik.join(', ');
     } catch (e) {
         chatOnlineEl.textContent = '';
     }
