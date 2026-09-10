@@ -71,39 +71,47 @@ CUACA_KODE_WMO = {
 
 def ambil_cuaca():
     """Ambil cuaca terkini dari Open-Meteo, di-cache 10 menit supaya tidak
-    memanggil API eksternal tiap kali dashboard di-poll oleh banyak perangkat."""
+    memanggil API eksternal tiap kali dashboard di-poll oleh banyak perangkat.
+    Dicoba maksimal 2x kalau gagal (jaringan kadang butuh percobaan ulang)."""
     sekarang = time.time()
     if _cuaca_cache["data"] and (sekarang - _cuaca_cache["waktu_ambil"] < CUACA_CACHE_DETIK):
         return _cuaca_cache["data"]
-    try:
-        r = requests.get(
-            "https://api.open-meteo.com/v1/forecast",
-            params={
-                "latitude": CUACA_LAT, "longitude": CUACA_LON,
-                "current_weather": "true", "timezone": "Asia/Jakarta"
-            },
-            timeout=8
-        )
-        r.raise_for_status()
-        cw = r.json().get("current_weather", {})
-        kode = int(cw.get("weathercode", -1))
-        deskripsi, ikon = CUACA_KODE_WMO.get(kode, ("Tidak diketahui", "❔"))
-        hasil = {
-            "suhu": round(cw.get("temperature", 0)),
-            "angin": round(cw.get("windspeed", 0)),
-            "deskripsi": deskripsi,
-            "ikon": ikon,
-            "ok": True
-        }
-        _cuaca_cache["data"] = hasil
-        _cuaca_cache["waktu_ambil"] = sekarang
-        return hasil
-    except Exception as e:
-        print(f"CUACA ERROR: {e}")
-        # Kalau gagal tapi masih ada cache lama, pakai itu daripada kosong total
-        if _cuaca_cache["data"]:
-            return _cuaca_cache["data"]
-        return {"ok": False, "error": "Gagal ambil data cuaca"}
+
+    error_terakhir = None
+    for percobaan in range(2):
+        try:
+            r = requests.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": CUACA_LAT, "longitude": CUACA_LON,
+                    "current_weather": "true", "timezone": "Asia/Jakarta"
+                },
+                headers={"User-Agent": "AlarmDashboard24Jam/1.0"},
+                timeout=15
+            )
+            r.raise_for_status()
+            cw = r.json().get("current_weather", {})
+            kode = int(cw.get("weathercode", -1))
+            deskripsi, ikon = CUACA_KODE_WMO.get(kode, ("Tidak diketahui", "❔"))
+            hasil = {
+                "suhu": round(cw.get("temperature", 0)),
+                "angin": round(cw.get("windspeed", 0)),
+                "deskripsi": deskripsi,
+                "ikon": ikon,
+                "ok": True
+            }
+            _cuaca_cache["data"] = hasil
+            _cuaca_cache["waktu_ambil"] = sekarang
+            return hasil
+        except Exception as e:
+            error_terakhir = e
+            print(f"CUACA ERROR (percobaan {percobaan + 1}/2): {type(e).__name__}: {e}")
+            time.sleep(1)
+
+    # Kalau 2x percobaan gagal tapi masih ada cache lama, pakai itu daripada kosong total
+    if _cuaca_cache["data"]:
+        return _cuaca_cache["data"]
+    return {"ok": False, "error": f"Gagal ambil data cuaca ({type(error_terakhir).__name__})"}
 
 HTML = """
 <!DOCTYPE html>
@@ -252,6 +260,15 @@ body.dark #widget-catatan .chat-baris.chat-sistem { color:#aaa; }
 #widget-catatan .chat-online { font-size:12px; color:#2a2; margin-bottom:4px; }
 #widget-catatan .chat-reaksi button { font-size:15px; padding:2px 8px; margin-right:4px; cursor:pointer; }
 #widget-catatan .chat-riwayat-link { font-size:12px; color:#06c; cursor:pointer; text-decoration:underline; margin-top:4px; display:inline-block; }
+#widget-catatan .chat-mention-list {
+  display:none; position:absolute; bottom:100%; left:0; right:0; margin-bottom:4px;
+  background:white; border:1px solid #ccc; border-radius:6px; max-height:120px; overflow-y:auto;
+  box-shadow:0 2px 6px rgba(0,0,0,.15); z-index:20;
+}
+body.dark #widget-catatan .chat-mention-list { background:#2a2a2a; border:1px solid #555; }
+#widget-catatan .chat-mention-list div { padding:6px 10px; cursor:pointer; font-size:13px; }
+#widget-catatan .chat-mention-list div:hover { background:#eee; }
+body.dark #widget-catatan .chat-mention-list div:hover { background:#3a3a3a; }
 
 /* Layar sempit (HP): widget ditumpuk 1 kolom vertikal - pola reorder atas-bawah
    yang familiar (mirip app Notes/Reminders), bukan sejajar berdesakan. */
@@ -325,7 +342,10 @@ if ('serviceWorker' in navigator) {
     </div>
     <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
       <input type="text" id="chatNama" placeholder="Nama" style="width:70px; flex:0 0 auto;">
-      <input type="text" id="chatInput" placeholder="Tulis pesan... (/sandar nama rute)" style="flex:1 1 120px;">
+      <div style="position:relative; flex:1 1 120px;">
+        <input type="text" id="chatInput" placeholder="Tulis pesan... (ketik @ untuk tag, /sandar nama rute)" style="width:100%; box-sizing:border-box;">
+        <div id="chatMentionList" class="chat-mention-list"></div>
+      </div>
       <input type="password" id="chatPassword" placeholder="Password" style="width:90px; flex:0 0 auto;">
       <button id="chatKirim" class="btn-aksen">Kirim</button>
       <button id="chatHapus" class="btn-aksen" style="background:#a00;" title="Hapus semua chat">🗑️ Hapus Chat</button>
@@ -629,16 +649,18 @@ function tambahBarisChat(pesan) {
     return { urgent, mention };
 }
 
+let daftarOnlineNama = [];
+
 async function perbaruiOnline() {
     try {
         const res = await fetch('/api/presence/count');
         const data = await res.json();
+        daftarOnlineNama = [...new Set(data.nama || [])];
         if (!data.count) {
             chatOnlineEl.textContent = '⚪ Tidak ada yang online';
             return;
         }
-        const namaUnik = [...new Set(data.nama)];
-        chatOnlineEl.textContent = '🟢 ' + namaUnik.length + ' online: ' + namaUnik.join(', ');
+        chatOnlineEl.textContent = '🟢 ' + daftarOnlineNama.length + ' online: ' + daftarOnlineNama.join(', ');
     } catch (e) {
         chatOnlineEl.textContent = '';
     }
@@ -726,7 +748,54 @@ async function kirimChat() {
 }
 chatKirimBtn.addEventListener('click', kirimChat);
 chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') kirimChat();
+    if (e.key === 'Enter' && chatMentionList.style.display !== 'block') kirimChat();
+    if (e.key === 'Escape') chatMentionList.style.display = 'none';
+});
+
+// ----- Autocomplete tag @nama -----
+const chatMentionList = document.getElementById('chatMentionList');
+
+function tampilkanMentionList(kandidat) {
+    if (!kandidat.length) {
+        chatMentionList.style.display = 'none';
+        return;
+    }
+    chatMentionList.innerHTML = '';
+    kandidat.forEach(nama => {
+        const item = document.createElement('div');
+        item.textContent = '@' + nama;
+        item.addEventListener('mousedown', (e) => {
+            e.preventDefault();  // supaya input tidak kehilangan fokus dulu
+            const posisiAt = chatInput.value.lastIndexOf('@');
+            chatInput.value = chatInput.value.slice(0, posisiAt) + '@' + nama + ' ';
+            chatMentionList.style.display = 'none';
+            chatInput.focus();
+        });
+        chatMentionList.appendChild(item);
+    });
+    chatMentionList.style.display = 'block';
+}
+
+chatInput.addEventListener('input', () => {
+    const nilai = chatInput.value;
+    const posisiAt = nilai.lastIndexOf('@');
+    if (posisiAt === -1) {
+        chatMentionList.style.display = 'none';
+        return;
+    }
+    const setelahAt = nilai.slice(posisiAt + 1);
+    if (/\s/.test(setelahAt)) {
+        chatMentionList.style.display = 'none';
+        return;
+    }
+    const namaSaya = chatNamaEl.value.trim();
+    const kandidat = daftarOnlineNama.filter(n =>
+        n.toLowerCase().startsWith(setelahAt.toLowerCase()) && n !== namaSaya
+    );
+    tampilkanMentionList(kandidat);
+});
+document.addEventListener('click', (e) => {
+    if (e.target !== chatInput) chatMentionList.style.display = 'none';
 });
 
 document.querySelectorAll('.chat-reaksi button').forEach(btn => {
@@ -1406,15 +1475,22 @@ def api_chat_send():
         if not query_asli:
             return jsonify({"ok": False, "error": "Format: /sandar <sebagian nama rute> [jam mulai]"}), 400
 
-        # Boleh disambiguasi pakai jam mulai, contoh: "/sandar ulu barumun 23:45"
-        m = re.search(r"(\d{1,2}:\d{2})\s*$", query_asli)
+        # Boleh disambiguasi pakai jam mulai. Terima berbagai format:
+        # "barumun 23:45", "barumun(6:53)", "barumun 6:53", "barumun (6:53)"
+        m = re.search(r"\(?\s*(\d{1,2}):(\d{2})\s*\)?\s*$", query_asli)
         jam_filter = None
         query = query_asli
         if m:
-            jam_filter = m.group(1)
-            if len(jam_filter.split(":")[0]) == 1:
-                jam_filter = "0" + jam_filter
+            jam_filter = (int(m.group(1)), int(m.group(2)))  # bandingkan sebagai angka, bukan string,
+            # supaya "6:53" dan "06:53" dianggap sama (data jadwal tersimpan tanpa nol di depan)
             query = query_asli[:m.start()].strip()
+
+        def jam_sama(jam_teks):
+            try:
+                jam_str, menit_str = jam_teks.strip().split(":")
+                return (int(jam_str), int(menit_str)) == jam_filter
+            except (ValueError, AttributeError):
+                return False
 
         rows_now = baca_rows()
         just_rows_now = [v for k, v in rows_now]
@@ -1424,7 +1500,7 @@ def api_chat_send():
         for (k, v), status in zip(rows_now, status_list_now):
             if query and query not in v[0].lower():
                 continue
-            if jam_filter and v[2].strip() != jam_filter:
+            if jam_filter and not jam_sama(v[2]):
                 continue
             cocok_semua.append((k, v, status))
 
