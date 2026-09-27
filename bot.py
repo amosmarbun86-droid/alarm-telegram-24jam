@@ -1375,6 +1375,42 @@ def api_announcements():
     hasil = [a for a in announcement_queue if a["id"] > since]
     return jsonify(hasil)
 
+@app.route("/api/status-live")
+def api_status_live():
+    """Endpoint PUBLIK READ-ONLY untuk dikonsumsi halaman lain (misal denah
+    gudang interaktif di project terpisah). TIDAK butuh password dan TIDAK
+    bisa dipakai untuk mengubah data apa pun — cuma baca status rute hari ini.
+    Sengaja tidak mengekspos FIREBASE_SECRET ke client sama sekali; semua
+    pembacaan Firebase tetap terjadi di server (Render), bukan di browser."""
+    rows_data = baca_rows()  # [(key, [route, slot, start, selesai, sandar_tanggal]), ...]
+    just_rows = [r[1][:4] for r in rows_data]  # [route, slot, start, selesai]
+    status_list = hitung_status_list(just_rows)
+    sandar_list = hitung_sandar_list([r[1] for r in rows_data], status_list)
+
+    hasil = []
+    for (key, r), status, sandar in zip(rows_data, status_list, sandar_list):
+        route, slot, start, selesai, _ = r
+        hasil.append({
+            "route": route,
+            "slot": slot,
+            "start": start,
+            "selesai": selesai,
+            "status": status,        # "", "freeload", "proses", atau "selesai"
+            "sudah_sandar": sandar,  # true/false
+        })
+
+    ada_proses = any(item["status"] == "proses" for item in hasil)
+
+    resp = jsonify({
+        "updated_at": datetime.now(ZoneInfo("Asia/Jakarta")).isoformat(),
+        "ada_proses": ada_proses,
+        "jadwal": hasil,
+    })
+    # Publik dibaca dari domain lain (Vercel/GitHub Pages), jadi izinkan CORS.
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 @app.route("/api/chat")
 def api_chat():
     """Kembalikan pesan chat dengan key > 'since' (urut kronologis).
